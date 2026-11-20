@@ -20,6 +20,7 @@ import {
 } from '@do-it/shared';
 import {
   de,
+  foldUmlauts,
   HOLIDAY_PATTERN,
   holidayDate,
   HOUR,
@@ -127,7 +128,7 @@ export interface ParseResult {
 type Tod = 'morning' | 'forenoon' | 'noon' | 'afternoon' | 'evening' | 'night' | 'workEnd';
 
 type Payload =
-  | { k: 'date'; date: PlainDate; time?: PlainTime; tod?: Tod }
+  | { k: 'date'; date: PlainDate; time?: PlainTime; tod?: Tod; src?: 'weekday' | 'explicit' }
   | { k: 'time'; time: PlainTime; tod?: Tod; numeric?: { h: number; m: number; shifted: boolean }; durationMin?: number }
   | { k: 'recurrence'; rec: Recurrence; time?: PlainTime; tod?: Tod }
   | { k: 'after' }
@@ -340,6 +341,16 @@ rule(
   'werktags|werktäglich|an\\s+werktagen|jeden\\s+werktag|(?:jeden\\s+)?(?:montag|mo\\.?)\\s*(?:-|–|bis)\\s*(?:freitag|fr\\.?)|montags\\s*(?:-|–|bis)\\s*freitags',
   () => rec({ freq: 'week', weekdays: [1, 2, 3, 4, 5] }),
 );
+rule(
+  PRIO_RECURRENCE + 1,
+  `(?:täglich|jeden\\s+tag)\\s+(?:außer|bis\\s+auf)\\s+(?:am\\s+|an\\s+|den\\s+)?(?:(?<we>wochenende[n]?)|(?<list>(?:${WD_ANY}|${WD_PLURAL})(?:${SEP}(?:${WD_ANY}|${WD_PLURAL}))*))`,
+  (g) => {
+    if (g.we) return rec({ freq: 'week', weekdays: [1, 2, 3, 4, 5] });
+    const skip = weekdayList(g.list!);
+    const days = [1, 2, 3, 4, 5, 6, 7].filter((d) => !skip.includes(d));
+    return days.length ? rec({ freq: 'week', weekdays: days }) : null;
+  },
+);
 rule(PRIO_RECURRENCE, 'jedes\\s+wochenende|an\\s+wochenenden|wochenends|an\\s+jedem\\s+wochenende', () => rec({ freq: 'week', weekdays: [6, 7] }));
 rule(
   PRIO_RECURRENCE,
@@ -534,7 +545,7 @@ rule(PRIO_DATE + 1, 'heute\\s+(?:morgen|früh|vormittag)', (g, c, m) => {
 rule(PRIO_DATE + 1, 'heute\\s+nacht', (g, c) => ({ k: 'date', date: c.today, time: c.t.night, tod: 'night' }));
 rule(PRIO_DATE, 'heute|heut', (g, c) => ({ k: 'date', date: c.today }));
 rule(PRIO_DATE, 'übermorgen', (g, c) => ({ k: 'date', date: addDays(c.today, 2) }));
-rule(PRIO_DATE, de('(?<!(?:heute|am|jeden|guten|früh|zum|den|der|von)\\s+)morgen'), (g, c) => ({ k: 'date', date: addDays(c.today, 1) }));
+rule(PRIO_DATE, de('(?<!(?<![\\p{L}])(?:heute|am|jeden|guten|früh|zum|den|der|von)\\s+)morgen'), (g, c) => ({ k: 'date', date: addDays(c.today, 1) }));
 rule(
   PRIO_DATE,
   `(?:(?<mod>diese[nmrs]?|kommende[nmrs]?|nächste[nmrs]?|übernächste[nmrs]?)\\s+)?(?<wd>${WD_ANY})(?:\\s+(?:in\\s+der\\s+)?(?<wk>nächste[nr]?|übernächste[nr]?|diese[nr]?|kommende[nr]?)\\s+woche)?`,
@@ -542,7 +553,7 @@ rule(
     if (!g.mod && !g.wk && g.wd === 'so') return null;
     const wd = parseWeekday(g.wd);
     if (!wd) return null;
-    return { k: 'date', date: weekdayDate(c, wd, g.mod ?? g.wk) };
+    return { k: 'date', date: weekdayDate(c, wd, g.mod ?? g.wk), src: 'weekday' };
   },
 );
 rule(
@@ -602,20 +613,20 @@ rule(PRIO_DATE, '(?<d>\\d{1,2})\\.(?<m>\\d{1,2})\\.(?:(?<y>\\d{4}|\\d{2})(?!\\d)
   const mo = Number(g.m ?? g.m2);
   if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
   const date = futureDate(c, d, mo, yearOf(g.y));
-  return date ? { k: 'date', date } : null;
+  return date ? { k: 'date', date, src: 'explicit' } : null;
 });
 rule(PRIO_DATE, '(?<y>\\d{4})-(?<m>\\d{2})-(?<d>\\d{2})', (g) => {
   const y = Number(g.y);
   const mo = Number(g.m);
   const d = Number(g.d);
-  return isValidDate(y, mo, d) ? { k: 'date', date: fromParts(y, mo, d) } : null;
+  return isValidDate(y, mo, d) ? { k: 'date', date: fromParts(y, mo, d), src: 'explicit' } : null;
 });
 rule(PRIO_DATE, `(?:(?<d>\\d{1,2})\\.?|(?<o>${ORD}))\\s*(?<mon>${MONTH_ANY})(?:\\s+(?<y>\\d{4}))?`, (g, c) => {
   const d = g.d ? Number(g.d) : parseOrdinal(g.o);
   const mo = parseMonth(g.mon);
   if (!d || d < 1 || !mo) return null;
   const date = futureDate(c, d, mo, yearOf(g.y));
-  return date ? { k: 'date', date } : null;
+  return date ? { k: 'date', date, src: 'explicit' } : null;
 });
 rule(PRIO_DATE, `(?<part>anfang|mitte|ende)\\s+(?<mon>${MONTH_FULL})(?:\\s+(?<y>\\d{4}))?|im\\s+(?<mon2>${MONTH_FULL})(?:\\s+(?<y2>\\d{4}))?`, (g, c) => {
   const mo = parseMonth(g.mon ?? g.mon2);
@@ -675,6 +686,28 @@ rule(PRIO_DATE, '(?:kw|kalenderwoche)\\s*(?<w>\\d{1,2})', (g, c) => {
   const y = toParts(c.today)[0];
   const d = isoWeekMonday(y);
   return { k: 'date', date: addDays(d, 6) >= c.today ? (d >= c.today ? d : c.today) : isoWeekMonday(y + 1) };
+});
+
+rule(
+  PRIO_DATE + 1,
+  `(?:(?<part>anfang|mitte|ende)\\s+|im\\s+)(?<mon>${MONTH_FULL})\\s+(?:des\\s+)?(?:nächsten|kommenden)\\s+jahres|(?:nächstes|kommendes)\\s+jahr\\s+(?:(?<part2>anfang|mitte|ende)|im)\\s+(?<mon2>${MONTH_FULL})`,
+  (g, c) => {
+    const mo = parseMonth(g.mon ?? g.mon2);
+    if (!mo) return null;
+    return { k: 'date', date: monthPart(toParts(c.today)[0] + 1, mo, g.part ?? g.part2) };
+  },
+);
+const SEASONS: Record<string, number> = { frühjahr: 3, frühling: 3, sommer: 6, herbst: 9, winter: 12 };
+rule(PRIO_DATE, '(?:im|zum|ab)\\s+(?<s>frühjahr|frühling|sommer|herbst|winter)', (g, c) => {
+  const startMonth = SEASONS[foldUmlauts(g.s!)] ?? 3;
+  const y = toParts(c.today)[0];
+  for (const year of [y - 1, y, y + 1]) {
+    const start = fromParts(year, startMonth, 1);
+    const end = addDays(addMonths(start, 3), -1);
+    if (c.today >= start && c.today <= end) return { k: 'date', date: c.today };
+    if (start > c.today) return { k: 'date', date: start };
+  }
+  return null;
 });
 
 // ---------- Regeln: Uhrzeiten ----------
@@ -748,6 +781,14 @@ rule(
     return tod ? { k: 'time', time: todTime(c, tod), tod } : null;
   },
 );
+
+rule(PRIO_TIME, '(?:um|bis|gegen|vor)\\s+mitternacht|mitternacht', () => ({ k: 'time', time: '23:59', numeric: { h: 23, m: 59, shifted: false }, tod: 'night' }));
+rule(PRIO_TIME, 'nach\\s+dem\\s+(?<meal>frühstück|mittagessen|abendessen)', (g, c) => {
+  const base = /fr(?:ü|ue)hst/.test(g.meal!) ? c.t.morning : /mittag/.test(g.meal!) ? c.t.noon : c.t.evening;
+  const time = minutesToTime(timeToMinutes(base) + 60);
+  const [h, m] = time.split(':').map(Number) as [number, number];
+  return { k: 'time', time, numeric: { h, m, shifted: false }, tod: 'afternoon' };
+});
 
 // ---------- Regeln: Dauer und Priorität ----------
 
@@ -828,7 +869,7 @@ function explicitMarkers(c: Ctx, out: Cand[]): void {
 // ---------- Titel ----------
 
 const FILLER_BEFORE =
-  /(?:^|\s)(?:am|um|bis|ab|an|im|zum|zur|in|für|fuer|gegen|spätestens|spaetestens|ca\.|circa|etwa|jeweils|immer|bereits|schon|noch|dann|und\s+zwar|also)\s*$/iu;
+  /(?:^|\s)(?:am|um|bis|ab|an|im|zum|zur|zu|in|für|fuer|gegen|spätestens|spaetestens|ca\.|circa|etwa|jeweils|immer|bereits|schon|noch|dann|und\s+zwar|also|den|oder)\s*$/iu;
 const GAP_FILLER = /^[\s,:;]*(?:(?:um|am|an|zum|zur|bis|ab|den|dem|der|für|auf)\s+)*[\s,:;]*$/iu;
 
 function buildTitle(input: string, removed: [number, number][], reminderAtStart: boolean): string {
@@ -1064,6 +1105,22 @@ export function parseTask(input: string, context: ParseContext): ParseResult {
         addSpan(cd.start, cd.end, 'rotation');
         break;
     }
+  }
+
+  // "Montag, den 30.11.": das ausdrückliche Datum gewinnt, wenn der Wochentag dazu passt.
+  if (dateCand && extraDates.length) {
+    const main = dateCand as Cand & { p: { k: 'date' } };
+    const sameDay = (a: Cand, b: Cand & { p: { k: 'date' } }) =>
+      a.p.k === 'date' &&
+      (a.p.date === b.p.date ||
+        ((a.p.src === 'weekday' || b.p.src === 'weekday') && a.p.src !== b.p.src && isoWeekday(a.p.date) === isoWeekday(b.p.date)));
+    const explicit = extraDates.find((d) => d.p.k === 'date' && d.p.src === 'explicit' && main.p.src === 'weekday' && sameDay(d, main));
+    if (explicit) {
+      extraDates.splice(extraDates.indexOf(explicit), 1);
+      extraDates.push(main);
+      dateCand = explicit as Cand & { p: { k: 'date' } };
+    }
+    for (let i = extraDates.length - 1; i >= 0; i--) if (sameDay(extraDates[i]!, dateCand as Cand & { p: { k: 'date' } })) extraDates.splice(i, 1);
   }
 
   // Wiederholung mit "bis"/"ab": Datum begrenzt bzw. startet die Serie.
