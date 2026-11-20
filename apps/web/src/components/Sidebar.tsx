@@ -4,7 +4,7 @@ import { createProject } from '../lib/actions';
 import { useData } from '../lib/data';
 import { syncState } from '../lib/sync';
 import { useNow } from '../lib/time';
-import { IconCalendar, IconInbox, IconPlus, IconSearch, IconSettings, IconTag, IconToday } from './Icons';
+import { IconCalendar, IconClock, IconFlag, IconInbox, IconPlus, IconSearch, IconSettings, IconTag, IconToday, IconUser } from './Icons';
 
 function NavLink({ href, icon, label, count, alert, onNavigate }: { href: string; icon: React.ReactNode; label: string; count?: number; alert?: boolean; onNavigate: () => void }) {
   const [location] = useLocation();
@@ -20,7 +20,7 @@ function NavLink({ href, icon, label, count, alert, onNavigate }: { href: string
 
 export function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () => void }) {
   const { projects, tasks, labels, inbox } = useData();
-  const { status, pending, me } = syncState.use();
+  const { status, pending, me, members } = syncState.use();
   const now = useNow();
   const [, navigate] = useLocation();
   const [adding, setAdding] = useState(false);
@@ -88,6 +88,13 @@ export function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () =>
           />
         </div>
       )}
+
+      <div className="nav-section">Filter</div>
+      {members.some((m) => m.userId !== me?.id) && (
+        <NavLink href="/filter/mine" icon={<IconUser />} label="Mir zugewiesen" count={open_.filter((t) => t.assigneeId === me?.id).length} onNavigate={onNavigate} />
+      )}
+      <NavLink href="/filter/p1" icon={<IconFlag />} label="Priorität 1" count={open_.filter((t) => t.priority === 1).length} onNavigate={onNavigate} />
+      <NavLink href="/filter/nodate" icon={<IconClock />} label="Ohne Datum" onNavigate={onNavigate} />
 
       {labels.length > 0 && <div className="nav-section">Labels</div>}
       {labels.map((l) => (

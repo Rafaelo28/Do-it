@@ -22,15 +22,15 @@ export function byDue(a: Task, b: Task): number {
 }
 
 export function TaskItem({ task, showProject = true, sub = false, sortable = false }: { task: Task; showProject?: boolean; sub?: boolean; sortable?: boolean }) {
-  const { projectMap, reminders, tasks } = useData();
+  const { projectMap, childStats, remindedTasks } = useData();
   const { me, members } = syncState.use();
   const now = useNow();
   const [, navigate] = useLocation();
   const project = projectMap.get(task.projectId);
   const overdue = isOverdue(task, now.date) || (!task.completedAt && task.dueDate === now.date && !!task.dueTime && task.dueTime < now.time);
-  const hasReminder = reminders.some((r) => r.taskId === task.id);
-  const subCount = tasks.filter((t) => t.parentId === task.id).length;
-  const subDone = tasks.filter((t) => t.parentId === task.id && t.completedAt).length;
+  const hasReminder = remindedTasks.has(task.id);
+  const subCount = childStats.get(task.id)?.total ?? 0;
+  const subDone = childStats.get(task.id)?.done ?? 0;
   const assignee = task.assigneeId ? members.find((m) => m.userId === task.assigneeId) : undefined;
   const drag = dragState.use();
   const canDrag = sortable && !sub && !task.completedAt;
@@ -129,14 +129,15 @@ export function TaskList({
   showSubtasks?: boolean;
   sortable?: boolean;
 }) {
-  const { tasks: all } = useData();
   const ids = new Set(tasks.map((t) => t.id));
+  const childrenOf = new Map<string, Task[]>();
+  for (const t of tasks) if (t.parentId && ids.has(t.parentId)) childrenOf.set(t.parentId, [...(childrenOf.get(t.parentId) ?? []), t]);
   // Unteraufgaben erscheinen unter ihrer Hauptaufgabe, wenn diese in der Liste ist.
   const top = tasks.filter((t) => !t.parentId || !ids.has(t.parentId));
   return (
     <ul className="task-list">
       {top.map((t) => (
-        <TaskBranch key={t.id} task={t} all={all} visible={ids} showProject={showProject} showSubtasks={showSubtasks} sortable={sortable} />
+        <TaskBranch key={t.id} task={t} childrenOf={childrenOf} visible={ids} showProject={showProject} showSubtasks={showSubtasks} sortable={sortable} />
       ))}
     </ul>
   );
@@ -144,20 +145,20 @@ export function TaskList({
 
 function TaskBranch({
   task,
-  all,
+  childrenOf,
   visible,
   showProject,
   showSubtasks,
   sortable,
 }: {
   task: Task;
-  all: Task[];
+  childrenOf: Map<string, Task[]>;
   visible: Set<string>;
   showProject: boolean;
   showSubtasks: boolean;
   sortable: boolean;
 }) {
-  const children = showSubtasks ? all.filter((t) => t.parentId === task.id && visible.has(t.id)) : [];
+  const children = showSubtasks && childrenOf ? (childrenOf.get(task.id) ?? []).filter((t) => visible.has(t.id)) : [];
   return (
     <>
       <TaskItem task={task} showProject={showProject} sub={!!task.parentId && visible.has(task.parentId)} sortable={sortable} />

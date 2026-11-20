@@ -230,6 +230,8 @@ export interface ImportTarget {
   onProgress?: (done: number, total: number) => void;
 }
 
+const IMPORT_COLORS = ['#3e63dd', '#e5484d', '#f76b15', '#8e4ec6', '#12a594', '#d6409f', '#978365', '#0f8b6c'];
+
 /** Plan anlegen: Projekte (gleichnamige werden wiederverwendet), Abschnitte, Aufgaben, Unteraufgaben, Kommentare. */
 export async function applyImport(plan: ImportPlan, t: ImportTarget): Promise<void> {
   let done = 0;
@@ -239,7 +241,7 @@ export async function applyImport(plan: ImportPlan, t: ImportTarget): Promise<vo
     let projectId = p.isInbox ? t.inboxId : t.existingProjects.find((e) => e.name.toLowerCase() === p.name.toLowerCase())?.id;
     if (!projectId) {
       projectId = uuidv7();
-      await t.mutate('project', projectId, { name: p.name, sortKey: projectKeys[pi]! });
+      await t.mutate('project', projectId, { name: p.name, sortKey: projectKeys[pi]!, color: IMPORT_COLORS[pi % IMPORT_COLORS.length]! });
     }
     const sectionIds = new Map<string, string>();
     const sectionKeys = generateNKeysBetween(null, null, p.sections.length);

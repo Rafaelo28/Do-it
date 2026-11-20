@@ -131,6 +131,25 @@ class SyncEngine {
     this.schedule();
   }
 
+  /** Viele Änderungen in einer Transaktion (z. B. Import) – deutlich schneller als einzeln. */
+  async mutateMany(items: { type: ObjectType; id: string; data: Record<string, unknown> }[]): Promise<void> {
+    if (!this.clock || !items.length) return;
+    const clock = this.clock;
+    await db.transaction('rw', [...OBJECT_TABLES(), db.outbox, db.meta], async () => {
+      let hlc = '';
+      for (const it of items) {
+        hlc = clock.tick();
+        const table = db.tableFor(it.type);
+        const existing = await table.get(it.id);
+        await table.put((existing ? { ...existing, ...it.data } : { ...OBJECT_DEFAULTS[it.type], ...it.data, id: it.id }) as never);
+        await db.outbox.add({ mid: uuidv7(), type: it.type, id: it.id, op: 'put', data: it.data, hlc });
+      }
+      await db.setMeta('lastHlc', hlc);
+    });
+    await this.updatePending();
+    this.schedule();
+  }
+
   schedule(delay = 250): void {
     if (this.debounce) clearTimeout(this.debounce);
     this.debounce = window.setTimeout(() => void this.sync(), delay);

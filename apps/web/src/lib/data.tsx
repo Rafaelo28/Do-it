@@ -11,6 +11,10 @@ export interface Data {
   reminders: Reminder[];
   inbox: Project | undefined;
   projectMap: Map<string, Project>;
+  /** Unteraufgaben je Aufgabe (gesamt / erledigt) */
+  childStats: Map<string, { total: number; done: number }>;
+  /** Aufgaben mit mindestens einer eigenen Erinnerung */
+  remindedTasks: Set<string>;
 }
 
 const empty: Data = {
@@ -22,6 +26,8 @@ const empty: Data = {
   reminders: [],
   inbox: undefined,
   projectMap: new Map(),
+  childStats: new Map(),
+  remindedTasks: new Set(),
 };
 
 const DataContext = createContext<Data>(empty);
@@ -38,6 +44,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const value = useMemo<Data>(() => {
     if (!projects || !sections || !tasks || !labels || !reminders) return empty;
     const sortedProjects = [...projects].sort((a, b) => (a.isInbox ? -1 : b.isInbox ? 1 : byKey(a, b)));
+    const childStats = new Map<string, { total: number; done: number }>();
+    for (const t of tasks) {
+      if (!t.parentId) continue;
+      const s = childStats.get(t.parentId) ?? { total: 0, done: 0 };
+      s.total++;
+      if (t.completedAt) s.done++;
+      childStats.set(t.parentId, s);
+    }
     return {
       loaded: true,
       projects: sortedProjects,
@@ -47,6 +61,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       reminders,
       inbox: sortedProjects.find((p) => p.isInbox),
       projectMap: new Map(sortedProjects.map((p) => [p.id, p])),
+      childStats,
+      remindedTasks: new Set(reminders.map((r) => r.taskId)),
     };
   }, [projects, sections, tasks, labels, reminders]);
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

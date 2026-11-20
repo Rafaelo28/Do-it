@@ -300,14 +300,18 @@ function TodoistImport({ me }: { me: Me }) {
   async function run() {
     if (!plan || !inbox) return;
     setProgress('0');
+    const batch: { type: Parameters<typeof sync.mutateMany>[0][number]['type']; id: string; data: Record<string, unknown> }[] = [];
     await applyImport(plan, {
       me,
       inboxId: inbox.id,
       existingProjects: projects,
       existingLabels: labels.map((l) => l.name),
-      mutate: (type, id, data) => sync.mutate(type, id, 'put', data),
-      onProgress: (d, total) => setProgress(`${d} / ${total}`),
+      mutate: async (type, id, data) => void batch.push({ type, id, data }),
     });
+    for (let i = 0; i < batch.length; i += 500) {
+      await sync.mutateMany(batch.slice(i, i + 500));
+      setProgress(`${Math.min(i + 500, batch.length)} / ${batch.length}`);
+    }
     toast(`${plan.taskCount} Aufgaben aus Todoist übernommen`);
     setPlan(null);
     setProgress(null);

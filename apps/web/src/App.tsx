@@ -12,7 +12,7 @@ import { toast } from './lib/store';
 import { sync, syncState, wipeLocalData } from './lib/sync';
 import { setTimeZone } from './lib/time';
 import { AuthView } from './views/Auth';
-import { LabelView, SearchView } from './views/Lists';
+import { FilterView, LabelView, SearchView } from './views/Lists';
 import { ProjectView } from './views/ProjectView';
 import { SettingsView } from './views/Settings';
 import { TaskDetail } from './views/TaskDetail';
@@ -139,6 +139,7 @@ function Shell() {
           <Route path="/project/:id">{(p) => <ProjectView id={p.id} key={p.id} />}</Route>
           <Route path="/label/:name">{(p) => <LabelView name={decodeURIComponent(p.name)} />}</Route>
           <Route path="/task/:id">{(p) => <TaskDetail id={p.id} />}</Route>
+          <Route path="/filter/:name">{(p) => <FilterView name={p.name} />}</Route>
           <Route path="/invite/:token">{(p) => <InviteAccept token={p.token} />}</Route>
           <Route path="/share">
             <ShareTarget onOpen={setAdding} />
