@@ -2,7 +2,9 @@ import { addDays, formatDateLong, formatDateRelative } from '@do-it/shared';
 import { useState } from 'react';
 import { QuickAdd } from '../components/QuickAdd';
 import { byDue, TaskList } from '../components/TaskList';
+import { updateTask } from '../lib/actions';
 import { useData } from '../lib/data';
+import { toast } from '../lib/store';
 import { syncState } from '../lib/sync';
 import { useNow } from '../lib/time';
 
@@ -28,6 +30,19 @@ export function TodayView() {
         <>
           <div className="group-head" style={{ color: 'var(--danger)' }}>
             Überfällig <span className="muted">{overdue.length}</span>
+            <button
+              className="btn ghost small"
+              style={{ marginLeft: 'auto', minHeight: 0, padding: '2px 8px' }}
+              onClick={() => {
+                const before = overdue.map((t) => [t.id, t.dueDate] as const);
+                for (const t of overdue) void updateTask(t.id, { dueDate: now.date });
+                toast(`${before.length} auf heute verschoben`, {
+                  action: { label: 'Rückgängig', run: () => before.forEach(([id, d]) => void updateTask(id, { dueDate: d })) },
+                });
+              }}
+            >
+              Alle auf heute
+            </button>
           </div>
           <TaskList tasks={overdue} />
         </>

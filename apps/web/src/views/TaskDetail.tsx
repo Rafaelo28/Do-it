@@ -1,5 +1,5 @@
 import { parseTask } from '@do-it/parser';
-import { describeRecurrence, formatDateRelative, type TaskData } from '@do-it/shared';
+import { addDays, describeRecurrence, formatDateRelative, isoWeekday, startOfIsoWeek, type TaskData } from '@do-it/shared';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
@@ -138,6 +138,22 @@ function Detail({ task }: { task: Task }) {
             <input className="input" type="date" value={task.dueDate ?? ''} disabled={readOnly} onChange={(e) => set({ dueDate: e.target.value || null })} />
             <input className="input" type="time" value={task.dueTime ?? ''} disabled={readOnly || !task.dueDate} onChange={(e) => set({ dueTime: e.target.value || null })} style={{ maxWidth: 120 }} />
           </div>
+          {!readOnly && (
+            <div className="row" style={{ gap: 4 }}>
+              {(
+                [
+                  ['Heute', now.date],
+                  ['Morgen', addDays(now.date, 1)],
+                  ['Wochenende', isoWeekday(now.date) >= 6 ? now.date : addDays(startOfIsoWeek(now.date), 5)],
+                  ['Nächste Woche', addDays(startOfIsoWeek(now.date), 7)],
+                ] as const
+              ).map(([label, d]) => (
+                <button key={label} className="chip" style={{ cursor: 'pointer' }} onClick={() => set({ dueDate: d })}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
           {task.dueDate && (
             <span className="small">
               {formatDateRelative(task.dueDate, now.date)}

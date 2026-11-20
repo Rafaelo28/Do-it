@@ -4,6 +4,7 @@ import { useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent } fr
 import { createTaskFromParse } from '../lib/actions';
 import { suggest, train } from '../lib/classifier';
 import { useData } from '../lib/data';
+import { db } from '../lib/db';
 import { toast } from '../lib/store';
 import { syncState } from '../lib/sync';
 import { nowLocal } from '../lib/time';
@@ -95,8 +96,10 @@ export function QuickAdd(props: QuickAddProps) {
     reset();
     inputRef.current?.focus();
     try {
+      // Direkt nach dem ersten Anmelden kennt das Gerät den Eingang evtl. noch nicht: kurz warten.
+      const targetProject = baseProject || (await waitForInbox());
       await createTaskFromParse(r, {
-        projectId: baseProject,
+        projectId: targetProject,
         sectionId: props.sectionId,
         parentId: props.parentId,
         me,
@@ -113,8 +116,9 @@ export function QuickAdd(props: QuickAddProps) {
 
   async function submitBatch() {
     if (!me || !batch) return;
+    const target = baseProject || (await waitForInbox());
     for (const r of batch) {
-      if (r.title.trim()) await createTaskFromParse(r, { projectId: baseProject, sectionId: props.sectionId, parentId: props.parentId, me, defaults: props.defaults });
+      if (r.title.trim()) await createTaskFromParse(r, { projectId: target, sectionId: props.sectionId, parentId: props.parentId, me, defaults: props.defaults });
     }
     toast(`${batch.length} Aufgaben angelegt`);
     setBatch(null);
@@ -313,6 +317,17 @@ export function QuickAdd(props: QuickAddProps) {
       </div>
     </div>
   );
+}
+
+/** Wartet, bis der Eingang lokal bekannt ist (erste Synchronisierung nach dem Anmelden). */
+async function waitForInbox(timeoutMs = 15_000): Promise<string> {
+  const start = Date.now();
+  for (;;) {
+    const inbox = (await db.projects.toArray()).find((p) => p.isInbox);
+    if (inbox) return inbox.id;
+    if (Date.now() - start > timeoutMs) throw new Error('Noch keine Verbindung zum Server');
+    await new Promise((r) => setTimeout(r, 150));
+  }
 }
 
 function chip(type: SpanType): React.CSSProperties {
