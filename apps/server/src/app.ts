@@ -81,7 +81,7 @@ export async function buildApp({ config, db, pushTransport, logger = false }: Ap
   const loginLimiter = new RateLimiter(10, 15 * 60_000);
   const inviteLimiter = new RateLimiter(30, 15 * 60_000);
 
-  const app = Fastify({ logger, trustProxy: true, bodyLimit: 2 * 1024 * 1024 });
+  const app = Fastify({ logger, trustProxy: true, bodyLimit: 2 * 1024 * 1024, disableRequestLogging: true });
   await app.register(fastifyCookie);
   await app.register(fastifyWebsocket, { options: { maxPayload: 64 * 1024 } });
 

@@ -1,0 +1,85 @@
+# Do-it – Produktion auf der Proxmox-VM
+# Start:   cp .env.example .env   (Werte eintragen)   &&   docker compose up -d --build
+# Update:  ./update.sh
+name: do-it
+
+x-app-env: &app-env
+  DATABASE_URL: postgres://doit:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD in .env setzen}@db:5432/doit
+  APP_URL: ${APP_URL:-https://do-it.gerda-hilft.de}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: doit
+      POSTGRES_USER: doit
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U doit -d doit"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: do-it:local
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      <<: *app-env
+    # Nur lokal auf der VM erreichbar (zum Testen mit curl). Von außen kommt man ausschließlich über den Tunnel.
+    ports:
+      - "127.0.0.1:8080:8080"
+
+  worker:
+    image: do-it:local
+    restart: unless-stopped
+    command: ["node", "dist/worker.js"]
+    depends_on:
+      db:
+        condition: service_healthy
+      app:
+        condition: service_healthy
+    environment:
+      <<: *app-env
+    healthcheck:
+      disable: true
+
+  cloudflared:
+    # Version bei Bedarf festpinnen, z. B. cloudflare/cloudflared:2026.11.0
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?CLOUDFLARE_TUNNEL_TOKEN in .env setzen}
+    depends_on:
+      - app
+
+  backup:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/backup.sh"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: doit
+      PGDATABASE: doit
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_TIME_UTC: ${BACKUP_TIME_UTC:-02:15}
+      KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    volumes:
+      - ./backup.sh:/backup.sh:ro
+      - ${BACKUP_DIR:-./backups}:/backups
+
+volumes:
+  pgdata:

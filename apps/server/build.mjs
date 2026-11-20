@@ -8,7 +8,7 @@ const external = new Set(Object.keys(pkg.dependencies ?? {}).filter((d) => !d.st
 const nameOf = (spec) => (spec.startsWith('@') ? spec.split('/').slice(0, 2).join('/') : spec.split('/')[0]);
 
 await build({
-  entryPoints: { main: 'src/main.ts', worker: 'src/worker-main.ts' },
+  entryPoints: { main: 'src/main.ts', worker: 'src/worker-main.ts', cli: 'src/cli.ts' },
   outdir: 'dist',
   bundle: true,
   platform: 'node',
@@ -28,4 +28,4 @@ await build({
   ],
   banner: { js: "import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);" },
 });
-console.log('Server gebaut: dist/main.js, dist/worker.js');
+console.log('Server gebaut: dist/main.js, dist/worker.js, dist/cli.js');
