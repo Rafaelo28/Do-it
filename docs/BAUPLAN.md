@@ -1,6 +1,6 @@
 # Do-it – Bauplan
 
-> Stand: 20.11.2026 · Status: Entwurf zur Abstimmung
+> Stand: 20.11.2026 · Status: abgestimmt (Cloudflare Tunnel, keine KI, Domain `do-it.gerda-hilft.de`)
 > Ziel: eine eigene, selbst gehostete Todo-App für dich und ein paar Leute, mit Eingabe in normaler Sprache, Erinnerungen und Synchronisierung über deinen Proxmox-Cluster. Laufende Kosten: 0 €.
 
 ---
@@ -14,10 +14,35 @@
 | Sprache | **TypeScript überall** (Client, Server, Parser) | Der Parser läuft dadurch identisch auf Gerät und Server. Ein Ökosystem, eine Sprache. |
 | Server | **Eine Debian-VM auf Proxmox mit Docker Compose** | VMs lassen sich im Cluster live migrieren und sauber sichern. Docker in LXC macht bei Updates oft Probleme. |
 | Datenbank | **PostgreSQL** | Robust, und die Job-Warteschlange für Erinnerungen läuft gleich mit drin, ohne Redis. |
-| Sprach-Eingabe | **Hybrid**: Regel-Parser auf dem Gerät + optional lokales LLM (Ollama) auf dem Server | Schnell, offline und privat. Die KI hilft nur bei komplizierten Sätzen. |
+| Sprach-Eingabe | **Nur Regeln, keine KI**: ausführlicher deutscher Regel-Parser auf dem Gerät | Schnell (< 5 ms), offline, privat, nachvollziehbar und mit Test-Korpus abgesichert. |
 | Benachrichtigungen | **Web Push (VAPID)** über einen eigenen Worker-Prozess | Kostenlos, kommt auch bei geschlossener App an. |
 | Nutzer | **Geschlossene Instanz**, Registrierung nur per Einladungslink, geteilte Projekte mit Rollen | Passt zu „ich + ein paar Leute“. |
-| Reverse Proxy | Dein vorhandener Proxy terminiert TLS und leitet an **einen** Port der VM weiter | Ein Upstream, eine Subdomain. |
+| Erreichbarkeit | **Cloudflare Tunnel** (`cloudflared` als Container) für `do-it.gerda-hilft.de` | Kein offener Port am Router, TLS macht Cloudflare, WebSockets gehen durch. |
+
+---
+
+## Umsetzungsstand (20.11.2026)
+
+| Phase | Stand | Was drin ist |
+|---|---|---|
+| 0 – Fundament | ✅ fertig | pnpm-Monorepo, TypeScript, Vitest, GitHub Actions (Typecheck, Tests mit Postgres, Build, Docker-Build) |
+| 1 – Kern-App offline | ✅ fertig | PWA mit IndexedDB, Ansichten Heute/Demnächst/Projekte/Labels/Suche/Filter, Unteraufgaben, Abschnitte, Sortieren per Ziehen, Parser mit Live-Markierung |
+| 2 – Sync + Server | ✅ fertig | Cursor-Sync mit feldweisem Mergen, WebSocket-Anstupser, Docker-Image, Compose mit Cloudflare Tunnel, Backups, Update-/Restore-Skripte |
+| 3 – Erinnerungen | ✅ fertig | Web Push (VAPID automatisch), Erinnerungs-Dienst mit Zeitzonen, Aktionen Erledigt/In 1 Std./Morgen, Morgen-Briefing, App-Badge |
+| 4 – Gemeinsam | ✅ fertig | Einladungslinks, Rollen, Zuweisen, Rotation, Kommentare, Verlauf, Benachrichtigung bei Zuweisung und Kommentar |
+| 5 – Schlauer Parser | ✅ weitgehend | 174 Korpus-Sätze, Feiertage, Jahreszeiten, „außer“, Projekt-Aliasse, lokal gelernte Projektvorschläge, Mehrzeilen-Eingabe, Teilen-Ziel |
+| 6 – Extras | 🟡 teilweise | ✅ Kalender-Abo, Filter, Todoist-Import (CSV), Tastenkürzel · ⏳ Statistiken, ntfy/E-Mail-Kanal, Passwort-Reset per Mail (braucht SMTP), Passkeys |
+
+**Abweichungen vom ursprünglichen Plan** (bewusst, zugunsten von Einfachheit):
+- Statt Drizzle ORM: eine schlanke eigene Query-Schicht mit SQL-Migrationen.
+- Statt einzelner Tabellen pro Objekttyp: eine Tabelle `objects` (Typ, Projekt, Besitzer, JSON-Daten, Feld-Uhren, `seq`). Das macht den Sync einfach und robust. Abgeleitet daraus gibt es `reminder_schedule` für den Erinnerungs-Dienst.
+- Statt Better Auth: eigener, kleiner Login mit scrypt und Sitzungs-Cookies.
+- Statt `rrule`: eigene Wiederholungs-Logik als JSON (siehe `packages/shared/src/recurrence.ts`).
+- Keine KI, wie besprochen.
+
+**Getestet:** 202 automatische Tests (Parser, Datum/Zeitzonen/Wiederholungen, Server-Integration gegen echte PostgreSQL, Todoist-Import) und ein Ende-zu-Ende-Test im Browser mit zwei Geräten. Er deckt Einladung, Live-Sync, Offline-Betrieb, App-Start ohne Netz und Sortieren ab. Das Docker-Image und der komplette Compose-Stapel (ohne Tunnel) wurden gebaut und gestartet, Backup und Restore ausprobiert.
+
+**Noch nicht real getestet** (geht nur bei euch): Push auf echten Android-/iPad-Geräten, der Cloudflare Tunnel mit `do-it.gerda-hilft.de`, der Betrieb auf der Proxmox-VM.
 
 ---
 
@@ -48,23 +73,22 @@ flowchart LR
   end
 
   subgraph Proxmox["Proxmox-Cluster"]
-    RP["Reverse Proxy<br/>(vorhanden, TLS)"]
+    RP["Cloudflare Tunnel<br/>cloudflared-Container"]
     subgraph VM["VM: Debian 13 + Docker Compose"]
       APP["app<br/>API · Sync · WebSocket · PWA-Dateien"]
       WK["worker<br/>Erinnerungen · Briefing · Aufräumen"]
       DB[("PostgreSQL")]
       BK["backup<br/>pg_dump nachts"]
     end
-    OL["ollama<br/>(optional, eigene VM)"]
   end
+  CF["Cloudflare<br/>do-it.gerda-hilft.de (TLS)"]
 
   PUSH["Push-Dienste<br/>Google · Apple · Mozilla"]
 
-  SC -- "HTTPS + WebSocket" --> RP --> APP
+  SC -- "HTTPS + WebSocket" --> CF --> RP --> APP
   APP --> DB
   WK --> DB
   BK --> DB
-  APP -- "nur bei Bedarf" --> OL
   WK -- "Web Push (VAPID)" --> PUSH -- "Benachrichtigung" --> SW
 ```
 
@@ -92,49 +116,47 @@ Empfehlung: **VM mit Debian 13, darin Docker + Docker Compose.**
 
 | VM | vCPU | RAM | Disk | Bemerkung |
 |---|---|---|---|---|
-| `do-it` (App + DB) | 2 | 4 GB | 30 GB | reicht für eine kleine Gruppe mit viel Luft |
-| `do-it-ai` (optional, Ollama) | 4–8 | 8–12 GB | 25 GB | nur CPU: wenige Sekunden pro Anfrage, mit GPU-Passthrough deutlich schneller |
+| `do-it` (App + DB + Tunnel) | 2 | 4 GB | 30 GB | reicht für eine kleine Gruppe mit viel Luft |
 
-Ollama bekommt eine **eigene VM**, damit ein hungriges Sprachmodell nie die App ausbremst. Fehlt die Hardware, lassen wir es einfach weg. Die App funktioniert ohne.
+Keine GPU nötig, keine KI.
 
 ### 3.3 Docker-Compose-Dienste
 
 | Dienst | Image | Aufgabe | Nach außen offen? |
 |---|---|---|---|
-| `app` | eigenes Image | REST-API, Sync, WebSocket, liefert die PWA-Dateien aus | ja, Port `8080` → nur für den Reverse Proxy |
+| `app` | eigenes Image | REST-API, Sync, WebSocket, liefert die PWA-Dateien aus | nein, nur im Docker-Netz (für `cloudflared`) |
 | `worker` | gleiches Image, `node dist/worker.js` | Erinnerungen versenden, Morgen-Briefing, Aufräumjobs | nein |
 | `db` | `postgres` (aktuelle Hauptversion) | Datenbank, Volume `pgdata` | nein |
 | `backup` | kleines Cron-Image mit `pg_dump` | nächtlicher Dump, Rotation (7 täglich / 4 wöchentlich / 6 monatlich) auf NFS oder Backup-Share | nein |
-| `ollama` | `ollama/ollama` | nur auf der AI-VM, Profil `ai` | nur intern |
+| `cloudflared` | `cloudflare/cloudflared` | baut den Tunnel zu Cloudflare auf, leitet `do-it.gerda-hilft.de` an `app:8080` | nein, Verbindung geht nur nach außen |
 
 Konfiguration über `.env` (liegt **nicht** im Git):
 
 ```env
-APP_URL=https://todo.deine-domain.de
+APP_URL=https://do-it.gerda-hilft.de
 DATABASE_URL=postgres://doit:***@db:5432/doit
 AUTH_SECRET=***                    # zufällig, 32+ Byte
 VAPID_PUBLIC_KEY=***               # einmalig erzeugen
 VAPID_PRIVATE_KEY=***
-VAPID_SUBJECT=mailto:admin@deine-domain.de
-LLM_PROVIDER=ollama                # ollama | anthropic | none
-OLLAMA_URL=http://10.0.0.42:11434
-OLLAMA_MODEL=…                     # wird per Test-Korpus ausgewählt
-ANTHROPIC_API_KEY=                 # leer lassen = aus
+VAPID_SUBJECT=mailto:admin@gerda-hilft.de
+CLOUDFLARE_TUNNEL_TOKEN=***        # aus dem Cloudflare-Dashboard (Zero Trust → Tunnels)
 SMTP_URL=                          # optional, für Einladungen per Mail
 ```
 
-### 3.4 Anforderungen an deinen Reverse Proxy
+### 3.4 Cloudflare Tunnel
 
-- Eigene **Subdomain** (z. B. `todo.deine-domain.de`), nicht unter einem Unterpfad. Service Worker und PWA-Installation sind am Domain-Root deutlich einfacher.
-- **HTTPS ist Pflicht.** Ohne HTTPS gibt es keinen Service Worker und keinen Push.
-- **WebSocket-Upgrade** für `/api/sync/ws` durchreichen, Timeout ≥ 120 s (der Server schickt alle 30 s einen Ping).
-- Header `X-Forwarded-For` und `X-Forwarded-Proto` setzen. Der Server vertraut nur der IP des Proxys.
-- `/sw.js` und `/manifest.webmanifest` nicht cachen (der Server setzt `Cache-Control: no-cache`, der Proxy soll das nicht überschreiben).
-- Empfohlen: HSTS, Body-Limit 10 MB (später für Anhänge).
+- Im Cloudflare-Dashboard unter **Zero Trust → Networks → Tunnels** einen Tunnel anlegen, das Token in `.env` eintragen.
+- **Public Hostname:** `do-it.gerda-hilft.de` → Service `http://app:8080`. Damit ist die App aus dem Internet erreichbar, ohne dass am Router ein Port offen ist.
+- **HTTPS** macht Cloudflare automatisch (Service Worker und Push brauchen HTTPS).
+- **WebSockets** gehen durch den Tunnel (Schalter „WebSockets“ unter *Network* muss an sein, ist Standard). Der Server schickt alle 30 s einen Ping, damit die Verbindung nicht nach 100 s Leerlauf getrennt wird.
+- **Caching:** Der Server setzt `Cache-Control: no-cache` für `index.html`, `/sw.js` und `/manifest.webmanifest`, `no-store` für `/api/*` und `immutable` für Dateien mit Hash im Namen. Cloudflare hält sich daran. Keine Cache-Everything-Regel für diese Domain anlegen.
+- **Ausschalten:** Rocket Loader (bricht JavaScript) und alles, was HTML verändert (z. B. E-Mail-Verschleierung).
+- **Kein Cloudflare Access** vor die App setzen. Die App hat einen eigenen Login, und Access würde den Service Worker und die Push-Aktionen aussperren.
+- Die echte Client-IP kommt im Header `CF-Connecting-IP`. Der Server nutzt sie für das Login-Rate-Limit.
 
-Sobald du mir sagst, welcher Proxy es ist (Nginx Proxy Manager, Traefik, Caddy, nginx, HAProxy …), kommt das passende Konfig-Snippet in `deploy/`.
+Eine Schritt-für-Schritt-Anleitung steht in `docs/betrieb.md`.
 
-**Netzwerk:** Die VM nimmt Port 8080 nur von der Proxy-IP an, SSH nur aus dem Admin-Netz. Ausgehend braucht der `worker` HTTPS zu den Push-Diensten (`fcm.googleapis.com`, `web.push.apple.com`, `*.push.services.mozilla.com`).
+**Netzwerk:** Die VM braucht keine eingehenden Ports außer SSH aus dem Admin-Netz. Ausgehend braucht sie HTTPS zu Cloudflare und zu den Push-Diensten (`fcm.googleapis.com`, `web.push.apple.com`, `*.push.services.mozilla.com`).
 
 ### 3.5 Deployment und Updates
 
@@ -164,7 +186,7 @@ Alle IDs sind **UUIDv7** und werden auf dem Gerät erzeugt, damit Offline-Anlege
 | `projects` | id, name, color, icon, parent_id, **aliases[]**, is_inbox, archived, sort_key |
 | `project_members` | project_id, user_id, role (`owner` · `editor` · `viewer`) |
 | `sections` | id, project_id, name, sort_key |
-| `tasks` | id, project_id, section_id, parent_task_id, title, description (Markdown), priority 1–4, due_date, due_time, deadline, duration_min, **rrule**, repeat_mode (`schedule` · `after_completion`), assignee_id, **rotation** (Liste von user_ids), completed_at, completed_by, sort_key, created_by |
+| `tasks` | id, project_id, section_id, parent_task_id, title, description (Markdown), priority 1–4, due_date, due_time, deadline, duration_min, **recurrence** (jsonb, inkl. „nach Erledigung“), assignee_id, **rotation** (Liste von user_ids), completed_at, completed_by, sort_key, created_by |
 | `task_completions` | task_id, user_id, completed_at, occurrence_date (Verlauf und Statistik, auch für Wiederholungen) |
 | `labels` / `task_labels` | id, name, color / Zuordnung |
 | `reminders` | id, task_id, user_id, kind (`relative` · `absolute`), offset_min, at, **fire_at** (berechnet), sent_at, locked_until |
@@ -221,24 +243,24 @@ Fertige Sync-Engines (z. B. PowerSync, Zero, ElectricSQL) haben wir abgewogen. D
 
 ### 6.1 Ergebnis-Format
 
-Regel-Parser und KI liefern **dasselbe** Format. Die Oberfläche weiß nicht, wer geparst hat:
+Der Parser liefert ein festes Format, das Oberfläche und Tests gleichermaßen nutzen:
 
 ```ts
 type ParsedInput = {
   title: string;
   due?: { date: string; time?: string };          // "2026-11-21", "15:00"
   deadline?: string;
-  repeat?: { rrule: string; mode: "schedule" | "after_completion" };
+  repeat?: Recurrence;                            // { freq, interval, byWeekday, …, afterCompletion }
   durationMin?: number;
   priority?: 1 | 2 | 3 | 4;
-  project?: { id: string; via: "explicit" | "name" | "alias" | "learned" | "llm"; confidence: number };
+  project?: { id: string; via: "explicit" | "name" | "alias" | "learned"; confidence: number };
   labels: string[];
   assignee?: { userId: string; via: string };
   rotation?: string[];                            // userIds
   reminders: ({ kind: "relative"; offsetMin: number } | { kind: "absolute"; at: string })[];
   spans: { start: number; end: number; type: SpanType }[];  // für die farbige Markierung
-  confidence: number;                             // 0..1
-  needsLLM: boolean;                              // unverstandene Zeitwörter übrig?
+  suggestions: Suggestion[];                      // Vorschläge/Rückfragen, z. B. zwei passende Projekte
+  warnings: string[];                             // unverstandene Zeitwörter, z. B. "nach Feierabend"
 };
 ```
 
@@ -255,7 +277,7 @@ type ParsedInput = {
 4. **Projekt-Erkennung im Text** (siehe 6.4).
 5. **Konflikte auflösen:** Überlappende Treffer → der längere bzw. sicherere gewinnt („30 min vorher“ ist eine Erinnerung, nicht die Dauer).
 6. **Titel bauen:** Erkannte Teile entfernen, verwaiste Füllwörter am Rand („am“, „um“, „bis“, „ab“) weg, Leerzeichen und Kommas aufräumen. **Implizit erkannte Projektnamen bleiben im Titel**, weil sie Teil des Satzes sind. Nur `#Projekt` wird entfernt.
-7. **Bewerten:** Bleiben Wörter übrig, die nach Zeit klingen, aber nicht verstanden wurden („nach“, „vor“, „Weihnachten“, „Feierabend“), wird `needsLLM = true` gesetzt.
+7. **Bewerten:** Bleiben Wörter übrig, die nach Zeit klingen, aber nicht verstanden wurden, erscheint ein gelber Hinweis-Chip („‚nach dem Urlaub‘ nicht verstanden“). Nichts wird geraten.
 
 ### 6.3 Beispiele (angenommen: heute ist Freitag, 20.11.2026)
 
@@ -269,7 +291,7 @@ type ParsedInput = {
 | `Angebot für den Website-Relaunch schreiben nächsten Dienstag` | „Angebot für den Website-Relaunch schreiben“ · Di 24.11. · Projekt Website-Relaunch (implizit, als Chip markiert) |
 | `alle 3 Tage nach Erledigung Pflanzen gießen` | „Pflanzen gießen“ · alle 3 Tage ab Erledigung |
 | `am 24.12. Weihnachtsessen vorbereiten 3h` | „Weihnachtsessen vorbereiten“ · Do 24.12. · Dauer 3 Std. |
-| `zwei Tage vor Silvester Raclette-Käse kaufen` | Regel-Parser kennt „vor Silvester“ nicht → **KI-Fallback**: Di 29.12. |
+| `zwei Tage vor Silvester Raclette-Käse kaufen` | „Raclette-Käse kaufen“ · Di 29.12. (Feiertags-Regeln inkl. Ostern-Berechnung) |
 
 ### 6.4 Projekte automatisch zuordnen
 
@@ -281,17 +303,14 @@ Drei Stufen, von sicher bis Vorschlag:
 
 **Lernen aus Korrekturen:** Entfernst du eine falsche Zuordnung (Projekt *Arbeit* bei „nach der Arbeit einkaufen“), speichert die App das als negatives Signal. Setzt du ein Projekt von Hand, wird das Schlüsselwort als Alias-Kandidat gemerkt. Die Aliasse sind in den Projekteinstellungen sichtbar und bearbeitbar.
 
-### 6.5 KI-Fallback (optional, auf dem Server)
+### 6.5 Keine KI – dafür gute Regeln
 
-- **Wann:** nur bei `needsLLM = true` (automatisch nach kurzer Tipp-Pause) oder per ✨-Knopf. Nie bei jeder Eingabe.
-- **Endpunkt:** `POST /api/parse` mit Text, aktuellem Datum, Zeitzone, deinen Projekten, Labels, Mitgliedern und Tageszeit-Einstellungen sowie dem Ergebnis des Regel-Parsers als Ausgangspunkt.
-- **Anbieter austauschbar** über ein Interface `ParseProvider`:
-  - `ollama` (**Standard, kostenlos, alles bleibt auf deinem Server**): kleines Instruct-Modell (3–4 Mrd. Parameter, quantisiert) mit erzwungener JSON-Ausgabe per Schema. Welches Modell am besten Deutsch versteht, entscheiden wir mit dem Test-Korpus.
-  - `anthropic` (optional, kostet pro Anfrage, nur mit Zustimmung): Claude API mit Structured Outputs und niedriger Effort-Stufe. Die Aufgabentexte und Projektnamen verlassen dann deinen Server. Das muss pro Nutzer aktiviert werden.
-  - `none`: kein Fallback.
-- **Sicherheitsnetz:** Die Antwort wird mit Zod geprüft. Projekt-IDs müssen existieren, Daten müssen gültig sein. Nach 5 s Timeout gilt das Ergebnis des Regel-Parsers. **KI-Ergebnisse werden nie ungefragt gespeichert**, sondern als Vorschau mit ✨-Markierung angezeigt.
+Entscheidung: **keine KI-Nutzung.** Stattdessen:
 
----
+- **Feiertage und Anlässe** als Datumsanker: Neujahr, Heilige Drei Könige, Valentinstag, Ostern (berechnet), Karfreitag, Ostermontag, 1. Mai, Muttertag, Christi Himmelfahrt, Pfingsten, Fronleichnam, Tag der Deutschen Einheit, Halloween, Allerheiligen, Nikolaus, Heiligabend, Weihnachten, Silvester. Dazu relative Angaben wie „2 Tage vor Silvester“ oder „eine Woche nach Ostern“.
+- **Persönliche Tageszeiten** aus den Einstellungen: „morgens“, „mittags“, „nachmittags“, „abends“, „nach Feierabend“.
+- **Ehrliche Rückmeldung:** Was nicht sicher erkannt wird, erscheint als Hinweis. Die Aufgabe wird trotzdem gespeichert, und der unverstandene Teil bleibt im Titel.
+- **Wachsender Korpus:** Jede Eingabe, die falsch verstanden wurde, wird ein neuer Testfall.
 
 ## 7. Erinnerungen und Benachrichtigungen
 
@@ -353,13 +372,13 @@ Später optional als zusätzliche Kanäle: **ntfy** (selbst gehostet, kostenlose
 
 ## 9. Sicherheit und Datenschutz
 
-- **Login:** E-Mail + Passwort (Argon2id), optional **Passkeys**. Sitzung als `httpOnly`-, `Secure`-, `SameSite=Lax`-Cookie. Umsetzung mit einer erprobten Bibliothek (z. B. Better Auth), keine Eigenbau-Krypto.
+- **Login:** E-Mail + Passwort, gehasht mit **scrypt** aus Node-Bordmitteln (OWASP-konform, keine nativen Abhängigkeiten). Sitzung als zufälliges Token im `httpOnly`-, `Secure`-, `SameSite=Lax`-Cookie, in der DB nur als SHA-256-Hash gespeichert. Passkeys später.
 - **Rate-Limit** auf Login und Einladungen, Sperre nach Fehlversuchen.
 - **CSRF:** SameSite-Cookie + Prüfung des `Origin`-Headers bei schreibenden Anfragen.
 - **Berechtigungen** werden ausschließlich serverseitig im Sync-Push geprüft, für jede einzelne Mutation.
 - **Header:** Content-Security-Policy, HSTS (über den Proxy), kein Einbetten in fremde Seiten.
 - **Geheimnisse** nur in `.env` auf der VM. Postgres ist nicht von außen erreichbar.
-- **Daten bleiben bei dir:** Mit Ollama verlässt nichts deinen Server. Push-Nachrichten laufen verschlüsselt über die Push-Dienste von Google, Apple oder Mozilla, die den Inhalt nicht lesen können.
+- **Daten bleiben bei dir:** Keine KI, keine Drittanbieter-Analyse. Cloudflare sieht als Tunnel-Betreiber den Verkehr (TLS endet bei Cloudflare). Push-Nachrichten laufen Ende-zu-Ende-verschlüsselt über die Push-Dienste von Google, Apple oder Mozilla.
 - **Passwort vergessen:** per E-Mail, falls SMTP vorhanden ist. Sonst setzt der Admin es per CLI-Befehl zurück.
 
 ---
@@ -371,10 +390,10 @@ Später optional als zusätzliche Kanäle: **ntfy** (selbst gehostet, kostenlose
 | Bereich | Wahl |
 |---|---|
 | Monorepo | pnpm Workspaces |
-| Frontend | React + Vite, TanStack Router, Tailwind CSS, dnd-kit (Drag & Drop), `vite-plugin-pwa` (Service Worker/Workbox) |
+| Frontend | React + Vite, `wouter` (Router), eigenes CSS mit Design-Tokens (hell/dunkel), `vite-plugin-pwa` (Service Worker/Workbox) |
 | Lokale DB | Dexie.js (IndexedDB) mit `liveQuery`, damit die UI automatisch aktualisiert |
-| Backend | Node.js (aktuelle LTS), Fastify, Zod, Drizzle ORM, `@fastify/websocket`, `web-push`, pino (Logs) |
-| Datum/Zeit | Temporal API (mit Polyfill), `rrule` für Wiederholungen |
+| Backend | Node.js (LTS), Fastify, Zod, PostgreSQL über `pg` mit schlanker eigener Query-Schicht und SQL-Migrationen, `@fastify/websocket`, `web-push` |
+| Datum/Zeit | eigene, getestete Helfer für Kalenderdaten und Zeitzonen (über `Intl`), eigene Wiederholungs-Logik als JSON statt RRULE |
 | Hilfen | `fractional-indexing`, UUIDv7, Hybrid Logical Clock (eigenes kleines Modul in `shared`) |
 | Tests | Vitest (Unit- und Parser-Korpus), Playwright (End-to-End, inkl. Offline und zwei Geräte) |
 | CI | GitHub Actions: Lint, Typecheck, Tests, Docker-Build |
@@ -385,18 +404,16 @@ Später optional als zusätzliche Kanäle: **ntfy** (selbst gehostet, kostenlose
 Do-it/
 ├─ apps/
 │  ├─ web/            # PWA (React): Ansichten, Quick-Add, Service Worker
-│  └─ server/         # Fastify: API, Sync, WebSocket, Auth; Einstieg worker.ts für Jobs
+│  └─ server/         # Fastify: API, Sync, WebSocket, Auth, SQL-Migrationen; Einstieg worker.ts für Jobs
 ├─ packages/
 │  ├─ parser/         # Sprach-Parser (reines TypeScript, ohne Abhängigkeit zu UI/DB)
 │  │  └─ corpus/      # Test-Sätze → erwartetes Ergebnis (das Herzstück der Qualität)
 │  ├─ shared/         # Zod-Schemas, Typen, Sync-Protokoll, HLC, Wiederholungs-Logik
-│  └─ db/             # Drizzle-Schema + Migrationen
 ├─ deploy/
 │  ├─ Dockerfile
 │  ├─ docker-compose.yml
 │  ├─ .env.example
 │  ├─ update.sh
-│  └─ reverse-proxy/  # Snippets für deinen Proxy
 └─ docs/
    ├─ BAUPLAN.md      # dieses Dokument
    └─ betrieb.md      # Backup, Restore, Updates (folgt)
@@ -409,7 +426,6 @@ Do-it/
 | `/api/auth/*` | Login, Logout, Passkeys, Sitzung |
 | `POST /api/sync/push` · `GET /api/sync/pull` · `GET /api/sync/ws` | einziger Schreib- und Leseweg für Daten |
 | `GET /api/sync/snapshot?project=…` | Projekt komplett laden (nach Beitritt) |
-| `POST /api/parse` | KI-Fallback |
 | `POST/DELETE /api/push/subscription` · `POST /api/push/action` | Push-Abo verwalten, Aktionen aus Benachrichtigungen |
 | `POST /api/invites` · `POST /api/invites/:token/accept` | Einladungen |
 | `GET /api/ical/:geheim.ics` | Kalender-Abo |
@@ -419,7 +435,7 @@ Do-it/
 
 ## 11. Teststrategie
 
-- **Parser-Korpus:** mindestens 300 deutsche Sätze mit festem „Jetzt“-Zeitpunkt und erwartetem Ergebnis, darunter Grenzfälle (Monatswechsel, Schaltjahr, Zeitumstellung am 28.03.2027 und 31.10.2027, „halb 4“ nachts vs. nachmittags). Jeder gefundene Fehler wird zuerst als Testfall aufgenommen. Derselbe Korpus bewertet die Ollama-Modelle.
+- **Parser-Korpus:** mindestens 300 deutsche Sätze mit festem „Jetzt“-Zeitpunkt und erwartetem Ergebnis, darunter Grenzfälle (Monatswechsel, Schaltjahr, Zeitumstellung am 28.03.2027 und 31.10.2027, „halb 4“ nachts vs. nachmittags). Jeder gefundene Fehler wird zuerst als Testfall aufgenommen.
 - **Sync-Tests:** zwei Browser-Kontexte in Playwright. Einer offline ändern, der andere online ändern, dann zusammenführen und prüfen. Dazu Fälle wie Löschen gegen Bearbeiten und Projekt-Entzug.
 - **Erinnerungen:** Worker mit gefälschter Uhr testen, Push-Dienst gemockt.
 - **Manuell vor jedem Release:** Checkliste auf echtem Android-Gerät und iPad (Push, Installation, Offline).
@@ -434,10 +450,10 @@ Ab Ende von Phase 3 ist die App im Alltag benutzbar. Danach kommt Phase für Pha
 |---|---|---|---|
 | **0 – Fundament** | Monorepo, CI, Lint/Tests, Dev-Setup mit Docker Compose, DB-Schema, Login + Einladung | Du kannst dich lokal einloggen und CI ist grün | S |
 | **1 – Kern-App offline** | PWA-Grundgerüst, Ansichten Eingang/Heute/Demnächst/Projekte, Aufgaben + Unteraufgaben, Drag & Drop, **Parser v1** (Datum, Uhrzeit, Wochentage, `#`, `@`, Priorität) mit Live-Markierung | Aufgaben per Sprache anlegen funktioniert ohne Server, Korpus ≥ 150 Sätze grün | L |
-| **2 – Sync + Server** | Sync-Protokoll, WebSocket, Proxmox-VM, Anbindung an deinen Reverse Proxy, Backups | Offline am Handy angelegt → online → nach < 2 s am Desktop sichtbar | L |
+| **2 – Sync + Server** | Sync-Protokoll, WebSocket, Proxmox-VM, Cloudflare Tunnel, Backups | Offline am Handy angelegt → online → nach < 2 s am Desktop sichtbar | L |
 | **3 – Erinnerungen** | Web Push, Worker, Aktions-Knöpfe, Morgen-Briefing, Erinnerungen per Spracheingabe, Wiederholungen inkl. „nach Erledigung“ | Erinnerung kommt auf Android, Desktop und iPad bei geschlossener App an | M |
 | **4 – Gemeinsam** | Geteilte Projekte, Rollen, Zuweisen, Rotation, Kommentare, Aktivität, Benachrichtigung bei Zuweisung | Zwei Nutzer teilen ein Haushaltsprojekt mit rotierender Aufgabe | M |
-| **5 – Schlauer Parser** | Implizite Projekterkennung, Lernen aus Korrekturen, Vorschlags-Klassifikator, Ollama-Fallback, Brain-Dump, Android-Teilen-Ziel | Korpus ≥ 300 Sätze, KI-Fallback löst die markierten Fälle | M |
+| **5 – Schlauer Parser** | Lernen aus Korrekturen, Vorschlags-Klassifikator, Brain-Dump, Android-Teilen-Ziel, Feiertage | Korpus ≥ 300 Sätze grün | M |
 | **6 – Extras** | Kalender-Abo, gespeicherte Filter, Statistiken, Todoist-Import, Befehlspalette, ntfy/E-Mail-Kanal | nach Lust und Bedarf | – |
 
 ---
@@ -449,20 +465,22 @@ Ab Ende von Phase 3 ist die App im Alltag benutzbar. Danach kommt Phase für Pha
 | iPad-Push nur als Home-Bildschirm-App | Einrichtungs-Assistent in der App. Wer die App nicht installiert, bekommt später optional E-Mail oder ntfy |
 | Android-Akku-Optimierung verzögert Push | Urgency high, Hinweis in den Einstellungen, ntfy als Alternative |
 | Eigener Sync ist anspruchsvoll | Kleines Datenmodell, feldweises Mischen, Server als einzige Wahrheit, ausführliche Zwei-Geräte-Tests ab Phase 2 |
-| Deutsche Sprache ist vielfältig | Korpus-getriebene Entwicklung. Jede Erkennung ist sichtbar und mit einem Tipp korrigierbar. KI nur als Helfer |
+| Deutsche Sprache ist vielfältig | Korpus-getriebene Entwicklung. Jede Erkennung ist sichtbar und mit einem Tipp korrigierbar. Unverstandenes wird angezeigt statt geraten |
 | Zeitzonen und Zeitumstellung | Lokales Datum + Uhrzeit speichern, `fire_at` serverseitig berechnen, eigene Tests für die Umstellungstage |
+| Cloudflare-Ausfall oder -Regeln stören | Geräte arbeiten offline weiter. Caching-Header vom Server, keine Access-Regel vor der App |
 | Ein Server = ein Ausfallpunkt | Die Geräte arbeiten offline weiter. Proxmox-HA, drei Backup-Ebenen, getestete Wiederherstellung |
-| Ollama zu langsam ohne GPU | Nur Fallback, asynchron mit 5-s-Timeout. Ohne KI bleibt alles nutzbar |
 
 ---
 
-## 14. Offene Fragen an dich
+## 14. Entscheidungen und offene Fragen
 
-1. **Welcher Reverse Proxy** läuft bei dir (Nginx Proxy Manager, Traefik, Caddy, nginx, HAProxy)? Und welche **Subdomain** soll die App bekommen?
-2. Soll die App **aus dem Internet** erreichbar sein oder nur über VPN? (Für Push muss nur der Server raus. Fürs Synchronisieren unterwegs müssen die Geräte den Server erreichen.)
-3. Gibt es im Cluster eine **GPU** oder genug freien RAM (≈ 8–12 GB) für die Ollama-VM?
-4. Hast du einen **SMTP-Server** für Einladungen und Passwort-Reset?
-5. Läuft schon ein **Single Sign-on** (Authentik, Keycloak …)? Dann könnten wir den Login darüber machen.
-6. Eingabe **nur auf Deutsch** oder auch auf Englisch?
-7. Willst du bestehende Aufgaben **aus Todoist übernehmen**?
-8. Bleibt der Name **„Do-it“**? Und hast du Wünsche fürs Aussehen (Farben, hell/dunkel)?
+**Entschieden (20.11.2026):**
+- Erreichbarkeit über **Cloudflare Tunnel**, Domain **`do-it.gerda-hilft.de`**, aus dem Internet erreichbar.
+- **Keine GPU, keine KI.** Der Parser arbeitet ausschließlich mit Regeln.
+
+**Noch offen:**
+1. Hast du einen **SMTP-Server** für Einladungen und Passwort-Reset? Bis dahin: Einladungslinks werden in der App kopiert und z. B. per Messenger verschickt.
+2. Läuft schon ein **Single Sign-on** (Authentik, Keycloak …)?
+3. Eingabe **nur auf Deutsch** oder auch auf Englisch? (Aktuell: Deutsch.)
+4. Willst du bestehende Aufgaben **aus Todoist übernehmen**?
+5. Wünsche fürs Aussehen (Farben, Logo)?

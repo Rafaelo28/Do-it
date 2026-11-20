@@ -1,0 +1,22 @@
+{
+  "name": "do-it",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @do-it/server --filter @do-it/web dev",
+    "build": "pnpm --filter @do-it/web build && pnpm --filter @do-it/server build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "pnpm -r typecheck",
+    "e2e": "node e2e/app.e2e.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.1"
+  }
+}
