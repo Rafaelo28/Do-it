@@ -503,7 +503,7 @@ export async function buildApp({ config, db, pushTransport, logger = false }: Ap
         .sendFile('index.html');
     app.get('/', (req, reply) => sendIndex(reply));
     app.setNotFoundHandler((req, reply) => {
-      if (req.url.startsWith('/api/') || req.method !== 'GET') return reply.code(404).send({ error: 'Nicht gefunden' });
+      if (req.url.startsWith('/api/') || (req.method !== 'GET' && req.method !== 'HEAD')) return reply.code(404).send({ error: 'Nicht gefunden' });
       return sendIndex(reply);
     });
   } else {
