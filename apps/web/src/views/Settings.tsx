@@ -1,10 +1,12 @@
 import type { Me, UserSettings } from '@do-it/shared';
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
+import { useData } from '../lib/data';
+import { applyImport, planTodoistImport, type ImportPlan } from '../lib/todoist';
 import { currentSubscription, disablePush, enablePush, isIos, isStandalone, pushSupported } from '../lib/push';
 import { toast } from '../lib/store';
 import { sync, syncState, wipeLocalData } from '../lib/sync';
-import { setTimeZone } from '../lib/time';
+import { nowLocal, setTimeZone } from '../lib/time';
 
 function zones(): string[] {
   const fn = (Intl as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf;
@@ -24,6 +26,7 @@ export function SettingsView() {
       <Times me={me} key={`t-${JSON.stringify(me.settings)}`} />
       <Calendar />
       {me.isAdmin && <InviteAccount />}
+      <TodoistImport me={me} />
       <Password />
       <section className="card" style={{ marginTop: 16, display: 'grid', gap: 10 }}>
         <strong>App</strong>
@@ -278,6 +281,66 @@ function InviteAccount() {
           Einladungslink erstellen
         </button>
       </div>
+    </section>
+  );
+}
+
+function TodoistImport({ me }: { me: Me }) {
+  const { projects, labels, inbox } = useData();
+  const [plan, setPlan] = useState<ImportPlan | null>(null);
+  const [progress, setProgress] = useState<string | null>(null);
+
+  async function onFiles(list: FileList | null) {
+    if (!list?.length) return;
+    const files = await Promise.all([...list].map(async (f) => ({ name: f.name, text: await f.text() })));
+    const now = nowLocal();
+    setPlan(planTodoistImport(files, { today: now.date, now: now.time }));
+  }
+
+  async function run() {
+    if (!plan || !inbox) return;
+    setProgress('0');
+    await applyImport(plan, {
+      me,
+      inboxId: inbox.id,
+      existingProjects: projects,
+      existingLabels: labels.map((l) => l.name),
+      mutate: (type, id, data) => sync.mutate(type, id, 'put', data),
+      onProgress: (d, total) => setProgress(`${d} / ${total}`),
+    });
+    toast(`${plan.taskCount} Aufgaben aus Todoist übernommen`);
+    setPlan(null);
+    setProgress(null);
+  }
+
+  return (
+    <section className="card" style={{ marginTop: 16, display: 'grid', gap: 10 }}>
+      <strong>Aus Todoist übernehmen</strong>
+      <span className="small muted">
+        In Todoist unter Einstellungen → Backups ein Backup herunterladen und entpacken. Dann hier alle CSV-Dateien auf einmal auswählen. Gleichnamige Projekte werden ergänzt, „Inbox“ landet im Eingang.
+      </span>
+      <input type="file" accept=".csv,text/csv" multiple onChange={(e) => void onFiles(e.target.files)} />
+      {plan && (
+        <div className="hint" style={{ display: 'grid', gap: 6 }}>
+          <span>
+            {plan.projects.length} Projekte · {plan.taskCount} Aufgaben · {plan.commentCount} Kommentare
+          </span>
+          {plan.warnings.slice(0, 5).map((w) => (
+            <span key={w} className="small">
+              ⚠ {w}
+            </span>
+          ))}
+          {plan.warnings.length > 5 && <span className="small">… und {plan.warnings.length - 5} weitere Hinweise</span>}
+          <div className="row">
+            <button className="btn primary" disabled={!!progress || !plan.taskCount} onClick={() => void run()}>
+              {progress ? `Übernehme … ${progress}` : 'Jetzt übernehmen'}
+            </button>
+            <button className="btn ghost" disabled={!!progress} onClick={() => setPlan(null)}>
+              Abbrechen
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
