@@ -9,7 +9,7 @@ self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 
 cleanupOutdatedCaches();
 precacheAndRoute(self.__WB_MANIFEST);
-registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html'), { denylist: [/^\/api\//] }));
+registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html'), { denylist: [/^\/api\//, /^\/oauth\//, /^\/\.well-known\//, /^\/mcp/] }));
 
 interface Payload {
   title: string;

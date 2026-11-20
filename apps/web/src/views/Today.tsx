@@ -4,6 +4,7 @@ import { QuickAdd } from '../components/QuickAdd';
 import { byDue, TaskList } from '../components/TaskList';
 import { updateTask } from '../lib/actions';
 import { useData } from '../lib/data';
+import { BriefingCard } from './Briefings';
 import { toast } from '../lib/store';
 import { syncState } from '../lib/sync';
 import { useNow } from '../lib/time';
@@ -25,6 +26,7 @@ export function TodayView() {
         <h1>Heute</h1>
         <span className="sub">{formatDateLong(now.date)}</span>
       </div>
+      <BriefingCard />
       <QuickAdd defaults={{ dueDate: now.date }} placeholder="Aufgabe für heute – oder einfach „morgen 9 Uhr …“" />
       {overdue.length > 0 && (
         <>

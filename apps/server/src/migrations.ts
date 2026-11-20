@@ -113,6 +113,52 @@ const MIGRATIONS: string[] = [
     value text NOT NULL
   );
   `,
+  /* 2: Claude-Anbindung (OAuth, Zugangsschlüssel, Briefings) */ `
+  CREATE TABLE oauth_clients (
+    id text PRIMARY KEY,
+    secret_hash text,
+    name text NOT NULL,
+    redirect_uris jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
+  );
+
+  CREATE TABLE oauth_codes (
+    code_hash text PRIMARY KEY,
+    client_id text NOT NULL REFERENCES oauth_clients(id) ON DELETE CASCADE,
+    user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    redirect_uri text NOT NULL,
+    code_challenge text NOT NULL,
+    scope text NOT NULL,
+    expires_at timestamptz NOT NULL
+  );
+
+  CREATE TABLE api_tokens (
+    id uuid PRIMARY KEY,
+    user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    kind text NOT NULL CHECK (kind IN ('personal', 'access', 'refresh')),
+    name text NOT NULL,
+    token_hash text NOT NULL UNIQUE,
+    client_id text REFERENCES oauth_clients(id) ON DELETE CASCADE,
+    grant_id uuid,
+    scope text NOT NULL,
+    expires_at timestamptz,
+    last_used_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now()
+  );
+  CREATE INDEX api_tokens_user ON api_tokens(user_id);
+  CREATE INDEX api_tokens_grant ON api_tokens(grant_id);
+
+  CREATE TABLE briefings (
+    id uuid PRIMARY KEY,
+    user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title text NOT NULL,
+    body text NOT NULL,
+    source text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    read_at timestamptz
+  );
+  CREATE INDEX briefings_user ON briefings(user_id, created_at DESC);
+  `,
 ];
 
 export async function migrate(db: Db): Promise<number> {

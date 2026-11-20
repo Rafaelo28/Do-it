@@ -12,6 +12,7 @@ import { toast } from './lib/store';
 import { sync, syncState, wipeLocalData } from './lib/sync';
 import { setTimeZone } from './lib/time';
 import { AuthView } from './views/Auth';
+import { BriefingsView } from './views/Briefings';
 import { FilterView, LabelView, SearchView } from './views/Lists';
 import { ProjectView } from './views/ProjectView';
 import { SettingsView } from './views/Settings';
@@ -73,7 +74,9 @@ export function App() {
         mode="login"
         onDone={(me) =>
           void start(me).then(() => {
-            if (next?.startsWith('/')) navigate(next);
+            // Freigabe für Claude o. Ä.: zurück zur Server-Seite (keine App-Route)
+            if (next?.startsWith('/oauth/')) window.location.href = next;
+            else if (next?.startsWith('/')) navigate(next);
             else if (location === '/login' || location === '/') navigate('/today');
           })
         }
@@ -139,6 +142,7 @@ function Shell() {
           <Route path="/project/:id">{(p) => <ProjectView id={p.id} key={p.id} />}</Route>
           <Route path="/label/:name">{(p) => <LabelView name={decodeURIComponent(p.name)} />}</Route>
           <Route path="/task/:id">{(p) => <TaskDetail id={p.id} />}</Route>
+          <Route path="/briefings" component={BriefingsView} />
           <Route path="/filter/:name">{(p) => <FilterView name={p.name} />}</Route>
           <Route path="/invite/:token">{(p) => <InviteAccept token={p.token} />}</Route>
           <Route path="/share">

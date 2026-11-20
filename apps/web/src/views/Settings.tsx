@@ -22,6 +22,7 @@ export function SettingsView() {
         <h1>Einstellungen</h1>
       </div>
       <Notifications me={me} />
+      <ClaudeConnect />
       <Profile me={me} key={`p-${me.name}-${me.timezone}`} />
       <Times me={me} key={`t-${JSON.stringify(me.settings)}`} />
       <Calendar />
@@ -281,6 +282,115 @@ function InviteAccount() {
           Einladungslink erstellen
         </button>
       </div>
+    </section>
+  );
+}
+
+const BRIEFING_PROMPT =
+  'Nutze den Do-it-Konnektor: Rufe get_overview auf und schreibe mir ein kurzes, freundliches Tagesbriefing auf Deutsch (höchstens 12 Zeilen): ' +
+  'Termine heute mit Uhrzeit, Überfälliges, was in den nächsten Tagen ansteht, was gestern erledigt wurde und höchstens drei Prioritäten für heute. ' +
+  'Speichere es mit post_briefing.';
+
+interface Connection {
+  id: string;
+  kind: 'oauth' | 'token';
+  name: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+function copy(text: string, what: string) {
+  void navigator.clipboard
+    .writeText(text)
+    .then(() => toast(`${what} kopiert`))
+    .catch(() => toast('Kopieren nicht möglich – bitte markieren und kopieren', { kind: 'error' }));
+}
+
+function ClaudeConnect() {
+  const [data, setData] = useState<{ mcpUrl: string; connections: Connection[] } | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const load = () => void api<{ mcpUrl: string; connections: Connection[] }>('GET', '/api/connections').then(setData).catch(() => {});
+  useEffect(load, []);
+  const url = data?.mcpUrl ?? `${location.origin}/mcp`;
+
+  return (
+    <section className="card" style={{ marginTop: 16, display: 'grid', gap: 10 }}>
+      <strong>Claude</strong>
+      <span className="small muted">
+        Verbinde Claude mit Do-it. Dann kann Claude deine Aufgaben lesen, neue anlegen, abhaken und dir Zusammenfassungen schreiben, die hier unter „Briefings“ und als
+        Benachrichtigung ankommen.
+      </span>
+      <div className="row">
+        <input className="input" readOnly value={url} style={{ flex: 1 }} onFocus={(e) => e.target.select()} aria-label="Konnektor-Adresse" />
+        <button className="btn" onClick={() => copy(url, 'Adresse')}>
+          Kopieren
+        </button>
+      </div>
+      <ol className="small" style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 4 }}>
+        <li>
+          In Claude (Web, Desktop oder App): <b>Einstellungen → Konnektoren → Benutzerdefinierten Konnektor hinzufügen</b>, Name „Do-it“, diese Adresse einfügen.
+        </li>
+        <li>Auf „Verbinden“ klicken und in Do-it die Freigabe mit „Erlauben“ bestätigen.</li>
+        <li>
+          Für die tägliche Zusammenfassung in Claude eine geplante Aufgabe anlegen (z. B. jeden Morgen um 7 Uhr) mit diesem Auftrag:{' '}
+          <button className="btn ghost small" style={{ minHeight: 0, padding: '0 6px' }} onClick={() => copy(BRIEFING_PROMPT, 'Auftrag')}>
+            Auftrag kopieren
+          </button>
+        </li>
+      </ol>
+      <details className="small">
+        <summary>Claude Code oder andere Programme (Zugangsschlüssel)</summary>
+        <p className="muted">Claude Code kann sich ebenfalls per Freigabe verbinden. Alternativ geht es mit einem persönlichen Schlüssel:</p>
+        {token ? (
+          <div style={{ display: 'grid', gap: 6 }}>
+            <div className="hint">Dieser Schlüssel wird nur jetzt angezeigt. Er gewährt vollen Zugriff auf deine Aufgaben.</div>
+            <code style={{ wordBreak: 'break-all' }}>{`claude mcp add --transport http do-it ${url} --header "Authorization: Bearer ${token}"`}</code>
+            <div>
+              <button className="btn" onClick={() => copy(`claude mcp add --transport http do-it ${url} --header "Authorization: Bearer ${token}"`, 'Befehl')}>
+                Befehl kopieren
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            className="btn"
+            onClick={() =>
+              void api<{ token: string }>('POST', '/api/tokens', { name: 'Claude Code' }).then((r) => {
+                setToken(r.token);
+                load();
+              })
+            }
+          >
+            Schlüssel erstellen
+          </button>
+        )}
+      </details>
+      {data && data.connections.length > 0 && (
+        <>
+          <strong className="small">Verbunden</strong>
+          <ul className="list-plain small">
+            {data.connections.map((c) => (
+              <li key={c.id}>
+                <span style={{ flex: 1 }}>
+                  {c.name} <span className="muted">· {c.kind === 'oauth' ? 'Freigabe' : 'Schlüssel'}</span>
+                  <span className="muted">
+                    {' '}
+                    · zuletzt {c.lastUsedAt ? new Date(c.lastUsedAt).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) : 'nie'} genutzt
+                  </span>
+                </span>
+                <button
+                  className="btn ghost small danger"
+                  onClick={() => {
+                    if (confirm(`Verbindung „${c.name}“ trennen?`)) void api('DELETE', `/api/connections/${c.id}`).then(load);
+                  }}
+                >
+                  Trennen
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </section>
   );
 }
