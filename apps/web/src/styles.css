@@ -921,3 +921,45 @@ kbd {
   overflow: hidden;
   clip: rect(0 0 0 0);
 }
+
+/* ---------- Briefings ---------- */
+
+.briefing {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 35%, var(--surface));
+}
+
+.md {
+  margin-top: 6px;
+}
+
+.md p {
+  margin: 6px 0;
+}
+
+.md ul,
+.md ol {
+  margin: 6px 0;
+  padding-left: 22px;
+}
+
+.md li {
+  margin: 2px 0;
+}
+
+.md-h {
+  font-weight: 650;
+  margin: 12px 0 4px;
+}
+
+.md-h1 {
+  font-size: 1.15rem;
+}
+
+.md code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.88em;
+  background: var(--hover);
+  padding: 1px 4px;
+  border-radius: 4px;
+}

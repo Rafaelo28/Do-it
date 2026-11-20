@@ -12,7 +12,8 @@ Selbst gehostete Todo-App für eine kleine Gruppe – Aufgaben in normaler Sprac
 - **Erinnerungen und Benachrichtigungen** auf Android, Desktop und iPad (als Home-Bildschirm-App), mit „Erledigt“, „In 1 Std.“ und „Morgen“ direkt in der Benachrichtigung, dazu ein Morgen-Briefing.
 - **Offline zuerst**: Jedes Gerät hat eine lokale Kopie, Änderungen werden im Hintergrund synchronisiert (feldweise, ohne Datenverlust bei gleichzeitigen Änderungen).
 - **Für ein paar Leute**: Einladungslinks, geteilte Projekte mit Rollen, Zuweisen, rotierende Haushaltsaufgaben, Kommentare, Verlauf.
-- **Kalender-Abo** (iCal), Mehrzeilen-Eingabe, „Teilen → Do-it“ auf Android, Tastenkürzel am Desktop.
+- **Claude-Anbindung** wie bei Todoist: MCP-Connector mit Anmeldung per Freigabe. Claude liest und pflegt Aufgaben und schreibt dir tägliche Briefings, die als Benachrichtigung ankommen ([docs/claude.md](docs/claude.md)).
+- **Kalender-Abo** (iCal), Todoist-Import, Mehrzeilen-Eingabe, „Teilen → Do-it“ auf Android, Tastenkürzel am Desktop.
 
 ## Aufbau
 
@@ -23,7 +24,7 @@ Selbst gehostete Todo-App für eine kleine Gruppe – Aufgaben in normaler Sprac
 | `apps/server` | Fastify + PostgreSQL: Login, Sync, WebSocket, Push, Erinnerungs-Dienst |
 | `apps/web` | React-PWA mit IndexedDB, Service Worker und Sync-Client |
 | `deploy` | Dockerfile, Compose (App, Worker, DB, Backup, Cloudflare Tunnel), Skripte |
-| `docs` | [Bauplan](docs/BAUPLAN.md) und [Betriebsanleitung](docs/betrieb.md) |
+| `docs` | [Bauplan](docs/BAUPLAN.md), [Betriebsanleitung](docs/betrieb.md), [Claude verbinden](docs/claude.md) |
 
 ## Schnellstart (Server)
 

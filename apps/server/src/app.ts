@@ -33,22 +33,17 @@ import {
   type UserRow,
 } from './auth';
 import type { Config } from './config';
+import { HttpError } from './errors';
 import type { Db } from './db';
 import { Hub } from './hub';
 import { buildIcs } from './ical';
 import { loadKeys, type ServerKeys } from './keys';
+import { registerMcp } from './mcp';
+import { registerOAuth } from './oauth';
 import { PushService, webPushTransport, type PushTransport } from './push';
 import { rescheduleReminders } from './reminders';
 import { isRejection, SyncService } from './sync';
 
-class HttpError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
 
 const emailSchema = z.string().trim().min(3).max(200).regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'ungültige E-Mail-Adresse');
 const passwordSchema = z.string().min(8, 'mindestens 8 Zeichen').max(200);
@@ -475,6 +470,34 @@ export async function buildApp({ config, db, pushTransport, logger = false }: Ap
       ]);
     } else throw new HttpError(400, 'Unbekannte Aktion');
     if (res.rejected.length) throw new HttpError(403, res.rejected[0]!.reason);
+    return { ok: true };
+  });
+
+  // ---------- Claude-Anbindung: OAuth, MCP, Briefings ----------
+
+  registerOAuth(app, { db, config, keys });
+  registerMcp(app, { db, config, sync, push });
+
+  app.get('/api/briefings', async (req) => {
+    const user = await requireUser(req);
+    const rows = await db.query<{ id: string; title: string; body: string; source: string; created_at: Date; read_at: Date | null }>(
+      'SELECT id, title, body, source, created_at, read_at FROM briefings WHERE user_id = $1 ORDER BY created_at DESC LIMIT 30',
+      [user.id],
+    );
+    return { briefings: rows.map((r) => ({ id: r.id, title: r.title, body: r.body, source: r.source, createdAt: r.created_at, read: !!r.read_at })) };
+  });
+
+  app.post('/api/briefings/:id/read', async (req) => {
+    const user = await requireUser(req);
+    const { id } = z.object({ id: uuidParam }).parse(req.params);
+    await db.query('UPDATE briefings SET read_at = now() WHERE id = $1 AND user_id = $2 AND read_at IS NULL', [id, user.id]);
+    return { ok: true };
+  });
+
+  app.delete('/api/briefings/:id', async (req) => {
+    const user = await requireUser(req);
+    const { id } = z.object({ id: uuidParam }).parse(req.params);
+    await db.query('DELETE FROM briefings WHERE id = $1 AND user_id = $2', [id, user.id]);
     return { ok: true };
   });
 

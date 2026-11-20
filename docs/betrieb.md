@@ -72,6 +72,7 @@ Den `CLOUDFLARE_TUNNEL_TOKEN` gibt es im nächsten Schritt.
 | Speed → Optimization | **Rocket Loader: aus** (zerstört JavaScript) |
 | Scrape Shield | **E-Mail-Adressen verschleiern: aus** (verändert HTML) |
 | Caching → Cache Rules | **keine** „Cache Everything“-Regel für `do-it.gerda-hilft.de`. Die App setzt selbst die richtigen Cache-Header. |
+| Security → Bots / WAF | Bot Fight Mode darf Claude nicht aussperren: ggf. Ausnahme für `/mcp`, `/oauth/`, `/.well-known/` (siehe [claude.md](claude.md)) |
 | Zero Trust → Access | **keine** Access-Anwendung vor die App setzen. Do-it hat einen eigenen Login, und Access würde Service Worker und Push-Aktionen blockieren. |
 | SSL/TLS | Modus „Full“ ist nicht nötig, der Tunnel ist bereits verschlüsselt. Standard passt. |
 
@@ -94,6 +95,8 @@ Dann **https://do-it.gerda-hilft.de** öffnen. Beim ersten Aufruf erscheint die 
 | **Android** (Chrome) | Seite öffnen → Menü ⋮ → **App installieren**. In Do-it: Einstellungen → **Benachrichtigungen einschalten** → Test senden. In den Android-Einstellungen für Do-it/Chrome die Akku-Optimierung ausschalten, dann kommen Erinnerungen pünktlicher. |
 | **iPad / iPhone** (Safari, ab iPadOS 16.4) | Seite in Safari öffnen → **Teilen** → **Zum Home-Bildschirm**. Do-it **vom Home-Bildschirm** starten → Einstellungen → Benachrichtigungen einschalten. Nur so gibt es Push auf iOS. |
 | **Desktop** (Chrome/Edge) | Seite öffnen → Symbol „App installieren“ in der Adressleiste. Benachrichtigungen kommen, solange der Browser läuft (auch im Hintergrund). |
+
+**Claude verbinden** (Zusammenfassungen, Aufgaben per Chat): siehe [claude.md](claude.md).
 
 **Weitere Personen einladen:** Einstellungen → *Neue Person einladen* → Link teilen (gilt 7 Tage, einmalig). Projekte teilt man danach im Projekt über ⚙ → *Jemanden einladen*.
 
