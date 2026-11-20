@@ -2,7 +2,6 @@ import {
   formatHlc,
   HybridClock,
   OBJECT_DEFAULTS,
-  OBJECT_SCHEMAS,
   parseHlc,
   PRIVATE_TYPES,
   uuidv7,
@@ -15,6 +14,7 @@ import {
   type SyncObject,
   type TaskData,
 } from '@do-it/shared';
+import { OBJECT_SCHEMAS } from '@do-it/shared/schemas';
 import { toMe, type UserRow } from './auth';
 import { lockObjects, type Db, type Queryable } from './db';
 import type { Hub } from './hub';
@@ -109,6 +109,7 @@ export class SyncService {
       [projectIds],
     );
 
+    const briefing = await this.db.one<{ at: Date | null }>('SELECT max(created_at) AS at FROM briefings WHERE user_id = $1', [user.id]);
     return {
       objects: rows.map(toSyncObject),
       cursor: next,
@@ -116,6 +117,7 @@ export class SyncService {
       projectIds,
       members: members.map<MemberInfo>((m) => ({ projectId: m.project_id, userId: m.user_id, role: m.role, name: m.name })),
       me: toMe(user),
+      briefingAt: briefing?.at ? new Date(briefing.at).toISOString() : null,
     };
   }
 

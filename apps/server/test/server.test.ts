@@ -8,9 +8,11 @@ import { createDb, type Db } from '../src/db';
 import { migrate } from '../src/migrations';
 import type { PushService } from '../src/push';
 import { processBriefings, processDueReminders } from '../src/reminders';
+import { currentStep, totpAt } from '../src/totp';
 
 const BASE = process.env.TEST_DATABASE_URL ?? 'postgres://doit:doit@localhost:5432/doit';
 const ORIGIN = 'http://localhost:8080';
+const SETUP_CODE = 'TEST-CODE-1';
 
 type App = Awaited<ReturnType<typeof buildApp>>['app'];
 
@@ -69,7 +71,7 @@ beforeAll(async () => {
   url.pathname = `/${dbName}`;
   db = createDb(url.toString());
   await migrate(db);
-  const config = loadConfig({ DATABASE_URL: url.toString(), APP_URL: ORIGIN } as NodeJS.ProcessEnv);
+  const config = loadConfig({ DATABASE_URL: url.toString(), APP_URL: ORIGIN, SETUP_CODE } as NodeJS.ProcessEnv);
   const built = await buildApp({
     config,
     db,
@@ -109,16 +111,21 @@ function obj(p: PullResponse, id: string): SyncObject | undefined {
 describe('Server', () => {
   it('Ersteinrichtung legt Admin mit Eingang an', async () => {
     expect((await anna.req('GET', '/api/auth/status')).json).toEqual({ setupRequired: true, user: null });
-    const res = await anna.req<{ user: { id: string; isAdmin: boolean } }>('POST', '/api/auth/setup', {
-      name: 'Anna',
-      email: 'Anna@Example.org',
-      password: 'geheim1234',
-      timezone: 'Europe/Berlin',
+    const form = { name: 'Anna', email: 'Anna@Example.org', password: 'geheim1234', timezone: 'Europe/Berlin' };
+    // ohne oder mit falschem Einrichtungscode kann niemand das Admin-Konto anlegen
+    expect((await anna.req('POST', '/api/auth/setup', form)).status).toBe(403);
+    expect((await anna.req('POST', '/api/auth/setup', { ...form, setupCode: 'FALSCH-00' })).status).toBe(403);
+    // zu bekannte Passwörter werden abgelehnt
+    expect((await anna.req('POST', '/api/auth/setup', { ...form, password: 'passwort123', setupCode: SETUP_CODE })).status).toBe(400);
+    const res = await anna.req<{ user: { id: string; isAdmin: boolean; twoFactor: boolean } }>('POST', '/api/auth/setup', {
+      ...form,
+      setupCode: 'test code 1', // Groß-/Kleinschreibung und Trennzeichen egal
     });
     expect(res.status).toBe(200);
     expect(res.json.user.isAdmin).toBe(true);
+    expect(res.json.user.twoFactor).toBe(false);
     annaId = res.json.user.id;
-    const again = await new Client().req('POST', '/api/auth/setup', { name: 'X', email: 'x@example.org', password: 'geheim1234' });
+    const again = await new Client().req('POST', '/api/auth/setup', { name: 'X', email: 'x@example.org', password: 'geheim1234', setupCode: SETUP_CODE });
     expect(again.status).toBe(409);
 
     const pull = await anna.pull();
@@ -190,11 +197,13 @@ describe('Server', () => {
       token: invite.json.token,
       name: 'Ben',
       email: 'ben@example.org',
-      password: 'passwort123',
+      password: 'ben-geheim-42',
     });
     expect(reg.status).toBe(200);
     benId = reg.json.user.id;
-    expect((await new Client().req('POST', '/api/auth/register', { token: invite.json.token, name: 'C', email: 'c@example.org', password: 'passwort123' })).status).toBe(400);
+    const reuse = await new Client().req('POST', '/api/auth/register', { token: invite.json.token, name: 'C', email: 'c@example.org', password: 'c-geheim-42' });
+    expect(reuse.status).toBe(400);
+    expect(reuse.text).toContain('Einladung');
 
     // Ben sieht Annas Projekt nicht und darf dort nichts anlegen
     let p = await ben.pull();
@@ -347,5 +356,109 @@ describe('Server', () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(messages.map((m) => JSON.parse(m).type)).toEqual(['hello', 'poke']);
     ws.terminate();
+  });
+
+  it('Sicherheits-Header', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/auth/status' });
+    expect(res.headers['x-frame-options']).toBe('DENY');
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(String(res.headers['permissions-policy'])).toContain('camera=()');
+    expect(res.headers['cache-control']).toBe('no-store');
+    // HSTS nur über HTTPS
+    expect(res.headers['strict-transport-security']).toBeUndefined();
+  });
+
+  it('Erledigt-Übersicht listet abgeschlossene Aufgaben', async () => {
+    const res = await anna.req<{ items: { title: string; byName: string; stillDone: boolean; recurring: boolean }[] }>('GET', '/api/completed?days=7');
+    expect(res.status).toBe(200);
+    expect(res.json.items.find((i) => i.title === 'Zahnarzt anrufen')).toMatchObject({ byName: 'Anna', stillDone: true, recurring: false });
+    expect(res.json.items.find((i) => i.title === 'Bad putzen (Rotation)')).toMatchObject({ recurring: true });
+    expect((await anna.req('GET', '/api/completed?days=0')).status).toBe(400);
+    expect((await new Client().req('GET', '/api/completed')).status).toBe(401);
+  });
+
+  it('Sitzungen anzeigen und andere Geräte abmelden', async () => {
+    const phone = new Client();
+    expect((await phone.req('POST', '/api/auth/login', { email: 'ben@example.org', password: 'ben-geheim-42' })).status).toBe(200);
+    const list = await ben.req<{ sessions: { device: string; current: boolean }[] }>('GET', '/api/me/sessions');
+    expect(list.json.sessions.length).toBeGreaterThanOrEqual(2);
+    expect(list.json.sessions.filter((s) => s.current)).toHaveLength(1);
+    const out = await ben.req<{ removed: number }>('POST', '/api/me/sessions/logout-others');
+    expect(out.json.removed).toBeGreaterThanOrEqual(1);
+    expect((await phone.req('GET', '/api/me')).status).toBe(401);
+    expect((await ben.req('GET', '/api/me')).status).toBe(200);
+  });
+
+  it('Zwei-Faktor-Anmeldung: einrichten, anmelden, Wiederherstellungscode, ausschalten', async () => {
+    const other = new Client();
+    expect((await other.req('POST', '/api/auth/login', { email: 'ben@example.org', password: 'ben-geheim-42' })).status).toBe(200);
+
+    const setup = await ben.req<{ secret: string; uri: string; qr: string }>('POST', '/api/me/2fa/setup');
+    expect(setup.status).toBe(200);
+    expect(setup.json.uri).toMatch(/^otpauth:\/\/totp\/Do-it:ben%40example\.org\?secret=/);
+    expect(setup.json.qr).toContain('<svg');
+    const secret = setup.json.secret.replace(/\s/g, '');
+    const step = currentStep();
+
+    expect((await ben.req('POST', '/api/me/2fa/enable', { code: '000000' })).status).toBe(400);
+    const enable = await ben.req<{ recoveryCodes: string[] }>('POST', '/api/me/2fa/enable', { code: totpAt(secret, step) });
+    expect(enable.status).toBe(200);
+    expect(enable.json.recoveryCodes).toHaveLength(8);
+    expect((await ben.req<{ user: { twoFactor: boolean } }>('GET', '/api/me')).json.user.twoFactor).toBe(true);
+    // andere Geräte müssen sich neu anmelden
+    expect((await other.req('GET', '/api/me')).status).toBe(401);
+
+    const login = (code?: string) =>
+      new Client().req<{ twoFactorRequired?: boolean; error?: string }>('POST', '/api/auth/login', { email: 'ben@example.org', password: 'ben-geheim-42', code });
+    const noCode = await login();
+    expect(noCode.status).toBe(401);
+    expect(noCode.json.twoFactorRequired).toBe(true);
+    expect((await login('123456')).status).toBe(401);
+    // der Code der Einrichtung ist verbraucht, der nächste gilt
+    expect((await login(totpAt(secret, step))).status).toBe(401);
+    expect((await login(totpAt(secret, step + 1))).status).toBe(200);
+    expect((await login(totpAt(secret, step + 1))).status).toBe(401);
+
+    // Wiederherstellungscode genau einmal
+    const recovery = enable.json.recoveryCodes[0]!;
+    expect((await login(recovery.toUpperCase())).status).toBe(200);
+    expect((await login(recovery)).status).toBe(401);
+
+    // ausschalten braucht Passwort und Code
+    expect((await ben.req('POST', '/api/me/2fa/disable', { password: 'falsch', code: enable.json.recoveryCodes[1] })).status).toBe(400);
+    expect((await ben.req('POST', '/api/me/2fa/disable', { password: 'ben-geheim-42', code: enable.json.recoveryCodes[1] })).status).toBe(200);
+    expect((await login()).status).toBe(200);
+    expect((await ben.req<{ user: { twoFactor: boolean } }>('GET', '/api/me')).json.user.twoFactor).toBe(false);
+  });
+
+  it('über HTTPS: __Host-Cookie, HSTS und altes Cookie gilt weiter', async () => {
+    const httpsOrigin = 'https://do-it.example';
+    const secure = await buildApp({
+      config: loadConfig({ DATABASE_URL: 'postgres://unused', APP_URL: httpsOrigin } as NodeJS.ProcessEnv),
+      db,
+    });
+    try {
+      const res = await secure.app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { email: 'anna@example.org', password: 'geheim1234' },
+        headers: { origin: httpsOrigin },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['strict-transport-security']).toContain('max-age=');
+      const cookies = ([] as string[]).concat(res.headers['set-cookie'] ?? []);
+      const host = cookies.find((c) => c.startsWith('__Host-doit_session='))!;
+      expect(host).toMatch(/; Path=\//);
+      expect(host).toMatch(/; HttpOnly/);
+      expect(host).toMatch(/; Secure/);
+      expect(host).not.toMatch(/Domain=/i);
+      const token = host.split(';')[0]!.split('=')[1]!;
+      const viaHost = await secure.app.inject({ method: 'GET', url: '/api/me', headers: { cookie: `__Host-doit_session=${token}` } });
+      expect(viaHost.statusCode).toBe(200);
+      const viaLegacy = await secure.app.inject({ method: 'GET', url: '/api/me', headers: { cookie: `doit_session=${token}` } });
+      expect(viaLegacy.statusCode).toBe(200);
+    } finally {
+      await secure.app.close();
+    }
   });
 });

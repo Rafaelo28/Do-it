@@ -2,7 +2,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { uuidv7 } from '@do-it/shared';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { hmac, newToken, RateLimiter, SESSION_COOKIE, sha256, userForSession, type UserRow } from './auth';
+import { clientIpOf, hmac, LEGACY_SESSION_COOKIE, newToken, RateLimiter, sessionCookieName, sha256, userForSession, type UserRow } from './auth';
 import type { Config } from './config';
 import type { Db } from './db';
 import { HttpError } from './errors';
@@ -114,9 +114,11 @@ button.primary{background:var(--accent);border-color:var(--accent);color:var(--a
 export function registerOAuth(app: FastifyInstance, deps: { db: Db; config: Config; keys: ServerKeys }) {
   const { db, config, keys } = deps;
   const base = origin(config);
+  const COOKIE = sessionCookieName(config.secureCookies);
+  const sessionToken = (req: FastifyRequest) => req.cookies[COOKIE] ?? req.cookies[LEGACY_SESSION_COOKIE];
   const registerLimiter = new RateLimiter(20, 60 * 60_000);
   const tokenLimiter = new RateLimiter(120, 15 * 60_000);
-  const ip = (req: FastifyRequest) => String(req.headers['cf-connecting-ip'] ?? req.ip);
+  const ip = clientIpOf;
 
   // Formulare (application/x-www-form-urlencoded), wie OAuth sie vorschreibt
   app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (req, body, done) => {
@@ -225,7 +227,7 @@ export function registerOAuth(app: FastifyInstance, deps: { db: Db; config: Conf
     if (!q.success) return errorPage(reply, 'Die Anfrage ist unvollständig (PKCE mit S256 ist Pflicht).');
     const client = await loadClient(q.data.client_id);
     if (!client || !client.redirect_uris.includes(q.data.redirect_uri)) return errorPage(reply, 'Unbekannte App oder Rücksprung-Adresse.');
-    const token = req.cookies[SESSION_COOKIE];
+    const token = sessionToken(req);
     const user = await userForSession(db, token);
     if (!user) return reply.redirect(`/login?next=${encodeURIComponent(req.url)}`);
 
@@ -256,7 +258,7 @@ export function registerOAuth(app: FastifyInstance, deps: { db: Db; config: Conf
     const o = req.headers.origin;
     if (o && !config.origins.includes(o)) throw new HttpError(403, 'Fremde Origin');
     const body = z.object({ params: z.string().max(4000), csrf: z.string().max(200), decision: z.enum(['allow', 'deny']) }).parse(req.body);
-    const token = req.cookies[SESSION_COOKIE];
+    const token = sessionToken(req);
     const user = await userForSession(db, token);
     if (!user) return reply.redirect('/login');
     const expected = hmac(keys.authSecret, `oauth-consent:${sha256(token!)}:${body.params}`);
@@ -341,7 +343,7 @@ export function registerOAuth(app: FastifyInstance, deps: { db: Db; config: Conf
 
   // ---------- Verbindungen in den Einstellungen ----------
   async function requireUser(req: FastifyRequest): Promise<UserRow> {
-    const user = await userForSession(db, req.cookies[SESSION_COOKIE]);
+    const user = await userForSession(db, sessionToken(req));
     if (!user) throw new HttpError(401, 'Nicht angemeldet');
     return user;
   }

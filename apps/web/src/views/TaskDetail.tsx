@@ -3,7 +3,7 @@ import { addDays, describeRecurrence, formatDateRelative, isoWeekday, startOfIso
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
-import { IconBack, IconBell, IconCheck, IconTrash } from '../components/Icons';
+import { IconBack, IconBell, IconCheck, IconTrash, IconX } from '../components/Icons';
 import { QuickAdd } from '../components/QuickAdd';
 import { TaskList } from '../components/TaskList';
 import { PRIORITY_COLOR, reminderLabel } from '../components/ui';
@@ -275,8 +275,15 @@ function Detail({ task }: { task: Task }) {
       <h2>Labels</h2>
       <div className="row">
         {task.labels.map((l) => (
-          <button key={l} className="chip" style={{ '--chip': 'var(--hl-label)' } as React.CSSProperties} disabled={readOnly} onClick={() => set({ labels: task.labels.filter((x) => x !== l) })}>
-            @{l} ✕
+          <button
+            key={l}
+            className="chip"
+            style={{ '--chip': 'var(--hl-label)' } as React.CSSProperties}
+            disabled={readOnly}
+            aria-label={`Label ${l} entfernen`}
+            onClick={() => set({ labels: task.labels.filter((x) => x !== l) })}
+          >
+            @{l} {!readOnly && <IconX size={12} />}
           </button>
         ))}
         {!readOnly && (

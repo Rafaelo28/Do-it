@@ -159,6 +159,13 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX briefings_user ON briefings(user_id, created_at DESC);
   `,
+  /* 3: Zwei-Faktor-Anmeldung */ `
+  ALTER TABLE users
+    ADD COLUMN totp_secret text,
+    ADD COLUMN totp_enabled boolean NOT NULL DEFAULT false,
+    ADD COLUMN totp_last_step bigint,
+    ADD COLUMN recovery_codes jsonb NOT NULL DEFAULT '[]';
+  `,
 ];
 
 export async function migrate(db: Db): Promise<number> {

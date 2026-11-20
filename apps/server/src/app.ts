@@ -8,13 +8,12 @@ import {
   addDays,
   completeTaskChanges,
   isValidTimeZone,
-  pushRequestSchema,
-  settingsSchema,
   uuidv7,
   zonedParts,
   type TaskData,
 } from '@do-it/shared';
-import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
+import { pushRequestSchema, settingsSchema } from '@do-it/shared/schemas';
+import Fastify, { LogController, type FastifyReply, type FastifyRequest } from 'fastify';
 import { z, ZodError } from 'zod';
 import {
   createSession,
@@ -24,7 +23,10 @@ import {
   newToken,
   normalizeEmail,
   RateLimiter,
-  SESSION_COOKIE,
+  clientIpOf,
+  LEGACY_SESSION_COOKIE,
+  passwordProblem,
+  sessionCookieName,
   SESSION_DAYS,
   sha256,
   toMe,
@@ -34,6 +36,9 @@ import {
 } from './auth';
 import type { Config } from './config';
 import { HttpError } from './errors';
+import { checkSetupCode, clearSetupCode, setupRequired } from './setup';
+import { generateRecoveryCodes, generateSecret, normalizeRecoveryCode, otpauthUri, verifyTotp } from './totp';
+import QRCode from 'qrcode';
 import type { Db } from './db';
 import { Hub } from './hub';
 import { buildIcs } from './ical';
@@ -58,6 +63,14 @@ export interface AppOptions {
   logger?: boolean | object;
 }
 
+/** Kurzbeschreibung eines Browsers für die Sitzungsliste. */
+function describeAgent(ua: string | null): string {
+  if (!ua) return 'Unbekanntes Gerät';
+  const os = /Android/.test(ua) ? 'Android' : /iPad/.test(ua) ? 'iPad' : /iPhone/.test(ua) ? 'iPhone' : /Mac OS X/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : 'Gerät';
+  const browser = /Edg\//.test(ua) ? 'Edge' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'Browser';
+  return `${browser} auf ${os}`;
+}
+
 export async function buildApp({ config, db, pushTransport, logger = false }: AppOptions) {
   const keys: ServerKeys = await loadKeys(db, config);
   const hub = new Hub();
@@ -73,14 +86,36 @@ export async function buildApp({ config, db, pushTransport, logger = false }: Ap
       });
     }
   });
+  /** Anmeldeversuche je IP + Konto (wird bei Erfolg zurückgesetzt) */
   const loginLimiter = new RateLimiter(10, 15 * 60_000);
+  /** Anmeldeversuche je IP über alle Konten (mehrere Geräte hinter einem Router) */
+  const ipLoginLimiter = new RateLimiter(30, 15 * 60_000);
   const inviteLimiter = new RateLimiter(30, 15 * 60_000);
+  const globalLimiter = new RateLimiter(config.RATE_LIMIT_PER_MIN, 60_000);
+  /** Fehlversuche beim zweiten Faktor pro Konto (unabhängig von der IP) */
+  const secondFactorLimiter = new RateLimiter(10, 15 * 60_000);
+  const COOKIE = sessionCookieName(config.secureCookies);
+  const sessionToken = (req: FastifyRequest) => req.cookies[COOKIE] ?? req.cookies[LEGACY_SESSION_COOKIE];
 
-  const app = Fastify({ logger, trustProxy: true, bodyLimit: 2 * 1024 * 1024, disableRequestLogging: true });
+  const app = Fastify({
+    logger,
+    trustProxy: true,
+    bodyLimit: 2 * 1024 * 1024,
+    // keine Zeile pro Anfrage im Log (weniger Rauschen, keine IPs/Pfade im Log)
+    logController: new LogController({ disableRequestLogging: true }),
+  });
   await app.register(fastifyCookie);
   await app.register(fastifyWebsocket, { options: { maxPayload: 64 * 1024 } });
 
-  const clientIp = (req: FastifyRequest) => String(req.headers['cf-connecting-ip'] ?? req.ip);
+  const clientIp = clientIpOf;
+
+  // Grobes Anfrage-Limit pro IP für alles Dynamische (bremst Skripte und Brute-Force)
+  app.addHook('onRequest', async (req, reply) => {
+    if (!/^\/(api\/|oauth\/|mcp)/.test(req.url) || req.url.startsWith('/api/health')) return;
+    if (!globalLimiter.check(clientIp(req))) {
+      return reply.code(429).header('Retry-After', '60').send({ error: 'Zu viele Anfragen. Bitte kurz warten.' });
+    }
+  });
 
   // Schutz gegen Cross-Site-Anfragen: schreibende API-Aufrufe nur von der eigenen Origin.
   app.addHook('onRequest', async (req) => {
@@ -93,6 +128,9 @@ export async function buildApp({ config, db, pushTransport, logger = false }: Ap
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('Referrer-Policy', 'same-origin');
     reply.header('X-Frame-Options', 'DENY');
+    reply.header('X-Permitted-Cross-Domain-Policies', 'none');
+    reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()');
+    if (config.secureCookies) reply.header('Strict-Transport-Security', 'max-age=31536000');
     if (req.url.startsWith('/api/')) reply.header('Cache-Control', 'no-store');
   });
 
@@ -103,6 +141,7 @@ export async function buildApp({ config, db, pushTransport, logger = false }: Ap
       return reply.code(400).send({ error: `${issue?.path.join('.') || 'Eingabe'}: ${issue?.message ?? 'ungültig'}` });
     }
     if (isRejection(err)) return reply.code(403).send({ error: err.message });
+    if ((err as { code?: string }).code === '23505') return reply.code(409).send({ error: 'Das gibt es schon' });
     const status = (err as { statusCode?: number }).statusCode;
     if (status && status < 500) return reply.code(status).send({ error: (err as Error).message });
     req.log.error(err);
@@ -110,7 +149,7 @@ export async function buildApp({ config, db, pushTransport, logger = false }: Ap
   });
 
   async function currentUser(req: FastifyRequest): Promise<UserRow | null> {
-    return userForSession(db, req.cookies[SESSION_COOKIE]);
+    return userForSession(db, sessionToken(req));
   }
 
   async function requireUser(req: FastifyRequest): Promise<UserRow> {
@@ -120,7 +159,8 @@ export async function buildApp({ config, db, pushTransport, logger = false }: Ap
   }
 
   function setSessionCookie(reply: FastifyReply, token: string): void {
-    reply.setCookie(SESSION_COOKIE, token, {
+    if (COOKIE !== LEGACY_SESSION_COOKIE) reply.clearCookie(LEGACY_SESSION_COOKIE, { path: '/' });
+    reply.setCookie(COOKIE, token, {
       path: '/',
       httpOnly: true,
       secure: config.secureCookies,
@@ -151,43 +191,65 @@ export async function buildApp({ config, db, pushTransport, logger = false }: Ap
   // ---------- Anmeldung ----------
 
   app.get('/api/auth/status', async (req) => {
-    const count = await db.one<{ n: number }>('SELECT count(*)::int AS n FROM users');
     const user = await currentUser(req);
-    return { setupRequired: (count?.n ?? 0) === 0, user: user ? toMe(user) : null };
+    return { setupRequired: user ? false : await setupRequired(db), user: user ? toMe(user) : null };
   });
 
   app.post('/api/auth/setup', async (req, reply) => {
     const body = z
-      .object({ name: nameSchema, email: emailSchema, password: passwordSchema, timezone: tzSchema.default('Europe/Berlin') })
+      .object({
+        name: nameSchema,
+        email: emailSchema,
+        password: passwordSchema,
+        timezone: tzSchema.default('Europe/Berlin'),
+        setupCode: z.string().max(64).default(''),
+      })
       .parse(req.body);
+    if (!loginLimiter.check(`setup|${clientIp(req)}`)) throw new HttpError(429, 'Zu viele Versuche. Bitte in 15 Minuten erneut probieren.');
+    if (!(await setupRequired(db))) throw new HttpError(409, 'Die Einrichtung ist bereits abgeschlossen');
+    if (!(await checkSetupCode(db, config, body.setupCode))) {
+      throw new HttpError(403, 'Einrichtungscode falsch. Er steht im Server-Log: docker compose logs app | grep Einrichtungscode');
+    }
+    const weak = passwordProblem(body.password, body.email, body.name);
+    if (weak) throw new HttpError(400, weak);
     const user = await db.tx(async (q) => {
       await q.query('LOCK TABLE users IN EXCLUSIVE MODE');
       const count = await q.one<{ n: number }>('SELECT count(*)::int AS n FROM users');
       if ((count?.n ?? 0) > 0) throw new HttpError(409, 'Die Einrichtung ist bereits abgeschlossen');
       return createUser(q, { ...body, isAdmin: true });
     });
+    await clearSetupCode(db);
     setSessionCookie(reply, await createSession(db, user.id, req.headers['user-agent']));
     return { user: toMe(user) };
   });
 
   app.post('/api/auth/login', async (req, reply) => {
-    const body = z.object({ email: z.string().max(200), password: z.string().max(200) }).parse(req.body);
+    const body = z.object({ email: z.string().max(200), password: z.string().max(200), code: z.string().max(40).optional() }).parse(req.body);
     const email = normalizeEmail(body.email);
     const key = `${clientIp(req)}|${email}`;
-    if (!loginLimiter.check(key) || !loginLimiter.check(clientIp(req))) {
+    if (!loginLimiter.check(key) || !ipLoginLimiter.check(clientIp(req))) {
       throw new HttpError(429, 'Zu viele Versuche. Bitte in 15 Minuten erneut probieren.');
     }
     const user = await db.one<UserRow>('SELECT * FROM users WHERE email = $1', [email]);
     const ok = user ? await verifyPassword(body.password, user.password_hash) : await hashPassword(body.password).then(() => false);
     if (!user || !ok) throw new HttpError(401, 'E-Mail oder Passwort falsch');
+    if (user.totp_enabled) {
+      if (!body.code) return reply.code(401).send({ error: 'Bitte den Code aus deiner Authenticator-App eingeben', twoFactorRequired: true });
+      if (!secondFactorLimiter.check(user.id)) throw new HttpError(429, 'Zu viele falsche Codes. Bitte in 15 Minuten erneut probieren.');
+      if (!(await checkSecondFactor(user, body.code))) {
+        return reply.code(401).send({ error: 'Code falsch oder schon benutzt', twoFactorRequired: true });
+      }
+    }
     loginLimiter.reset(key);
+    secondFactorLimiter.reset(user.id);
     setSessionCookie(reply, await createSession(db, user.id, req.headers['user-agent']));
     return { user: toMe(user) };
   });
 
   app.post('/api/auth/logout', async (req, reply) => {
-    await deleteSession(db, req.cookies[SESSION_COOKIE]);
-    reply.clearCookie(SESSION_COOKIE, { path: '/' });
+    await deleteSession(db, sessionToken(req));
+    reply.clearCookie(COOKIE, { path: '/' });
+    if (COOKIE !== LEGACY_SESSION_COOKIE) reply.clearCookie(LEGACY_SESSION_COOKIE, { path: '/' });
     return { ok: true };
   });
 
@@ -196,6 +258,8 @@ export async function buildApp({ config, db, pushTransport, logger = false }: Ap
     const body = z
       .object({ token: z.string().min(10).max(200), name: nameSchema, email: emailSchema, password: passwordSchema, timezone: tzSchema.default('Europe/Berlin') })
       .parse(req.body);
+    const weak = passwordProblem(body.password, body.email, body.name);
+    if (weak) throw new HttpError(400, weak);
     const user = await db.tx(async (q) => {
       const invite = await q.one<{ id: string; project_id: string | null; role: string }>(
         `SELECT id, project_id, role FROM invites WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now() FOR UPDATE`,
@@ -246,8 +310,89 @@ export async function buildApp({ config, db, pushTransport, logger = false }: Ap
     const user = await requireUser(req);
     const body = z.object({ current: z.string().max(200), next: passwordSchema }).parse(req.body);
     if (!(await verifyPassword(body.current, user.password_hash))) throw new HttpError(400, 'Aktuelles Passwort ist falsch');
+    const weak = passwordProblem(body.next, user.email, user.name);
+    if (weak) throw new HttpError(400, weak);
     await db.query('UPDATE users SET password_hash = $2 WHERE id = $1', [user.id, await hashPassword(body.next)]);
-    await db.query('DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2', [user.id, sha256(req.cookies[SESSION_COOKIE] ?? '')]);
+    await db.query('DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2', [user.id, sha256(sessionToken(req) ?? '')]);
+    return { ok: true };
+  });
+
+  // ---------- Sitzungen und Zwei-Faktor-Anmeldung ----------
+
+  /** TOTP-Code oder einmaliger Wiederherstellungscode; schützt vor Wiederverwendung. */
+  async function checkSecondFactor(user: UserRow, code: string): Promise<boolean> {
+    if (!user.totp_secret) return false;
+    const step = verifyTotp(user.totp_secret, code, user.totp_last_step === null ? null : Number(user.totp_last_step));
+    if (step !== null) {
+      const res = await db.query(
+        'UPDATE users SET totp_last_step = $2 WHERE id = $1 AND (totp_last_step IS NULL OR totp_last_step < $2) RETURNING id',
+        [user.id, step],
+      );
+      return res.length === 1;
+    }
+    const hash = sha256(normalizeRecoveryCode(code));
+    const res = await db.query(
+      `UPDATE users SET recovery_codes = recovery_codes - $2::text WHERE id = $1 AND recovery_codes ? $2::text RETURNING id`,
+      [user.id, hash],
+    );
+    return res.length === 1;
+  }
+
+  app.get('/api/me/sessions', async (req) => {
+    const user = await requireUser(req);
+    const current = sha256(sessionToken(req) ?? '');
+    const rows = await db.query<{ token_hash: string; created_at: Date; last_seen_at: Date; user_agent: string | null }>(
+      'SELECT token_hash, created_at, last_seen_at, user_agent FROM sessions WHERE user_id = $1 AND expires_at > now() ORDER BY last_seen_at DESC',
+      [user.id],
+    );
+    return {
+      sessions: rows.map((r) => ({ createdAt: r.created_at, lastSeenAt: r.last_seen_at, device: describeAgent(r.user_agent), current: r.token_hash === current })),
+    };
+  });
+
+  app.post('/api/me/sessions/logout-others', async (req) => {
+    const user = await requireUser(req);
+    const res = await db.query('DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2 RETURNING 1', [user.id, sha256(sessionToken(req) ?? '')]);
+    return { removed: res.length };
+  });
+
+  app.post('/api/me/2fa/setup', async (req) => {
+    const user = await requireUser(req);
+    if (user.totp_enabled) throw new HttpError(409, 'Zwei-Faktor-Anmeldung ist schon aktiv');
+    const secret = generateSecret();
+    await db.query('UPDATE users SET totp_secret = $2, totp_last_step = NULL WHERE id = $1', [user.id, secret]);
+    const uri = otpauthUri(secret, user.email);
+    const qr = await QRCode.toString(uri, { type: 'svg', margin: 1, errorCorrectionLevel: 'M' });
+    return { secret: secret.replace(/(.{4})/g, '$1 ').trim(), uri, qr };
+  });
+
+  app.post('/api/me/2fa/enable', async (req) => {
+    const user = await requireUser(req);
+    const { code } = z.object({ code: z.string().max(20) }).parse(req.body);
+    if (user.totp_enabled) throw new HttpError(409, 'Zwei-Faktor-Anmeldung ist schon aktiv');
+    if (!user.totp_secret) throw new HttpError(400, 'Bitte zuerst die Einrichtung starten');
+    const step = verifyTotp(user.totp_secret, code, null);
+    if (step === null) throw new HttpError(400, 'Code falsch – bitte Uhrzeit des Handys prüfen und neuen Code eingeben');
+    const codes = generateRecoveryCodes();
+    await db.query('UPDATE users SET totp_enabled = true, totp_last_step = $2, recovery_codes = $3 WHERE id = $1', [
+      user.id,
+      step,
+      JSON.stringify(codes.map((c) => sha256(normalizeRecoveryCode(c)))),
+    ]);
+    // Andere Sitzungen müssen sich neu (mit Code) anmelden
+    await db.query('DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2', [user.id, sha256(sessionToken(req) ?? '')]);
+    hub.poke([user.id]);
+    return { recoveryCodes: codes };
+  });
+
+  app.post('/api/me/2fa/disable', async (req) => {
+    const user = await requireUser(req);
+    const body = z.object({ password: z.string().max(200), code: z.string().max(40) }).parse(req.body);
+    if (!secondFactorLimiter.check(user.id)) throw new HttpError(429, 'Zu viele Versuche. Bitte in 15 Minuten erneut probieren.');
+    if (!(await verifyPassword(body.password, user.password_hash))) throw new HttpError(400, 'Passwort falsch');
+    if (!user.totp_enabled || !(await checkSecondFactor(user, body.code))) throw new HttpError(400, 'Code falsch');
+    await db.query(`UPDATE users SET totp_enabled = false, totp_secret = NULL, totp_last_step = NULL, recovery_codes = '[]' WHERE id = $1`, [user.id]);
+    hub.poke([user.id]);
     return { ok: true };
   });
 
@@ -390,6 +535,43 @@ export async function buildApp({ config, db, pushTransport, logger = false }: Ap
     return { activity: rows.map((r) => ({ id: r.id, summary: r.summary, at: r.created_at, objectId: r.object_id, kind: r.kind })) };
   });
 
+  app.get('/api/completed', async (req) => {
+    const user = await requireUser(req);
+    const { days } = z.object({ days: z.coerce.number().int().min(1).max(365).default(30) }).parse(req.query);
+    const rows = await db.query<{
+      task_id: string;
+      user_id: string | null;
+      user_name: string | null;
+      created_at: Date;
+      project_id: string | null;
+      task: TaskData | null;
+      deleted: boolean | null;
+      summary: string;
+    }>(
+      `SELECT a.object_id AS task_id, a.user_id, u.name AS user_name, a.created_at, a.project_id, t.data AS task, t.deleted, a.summary
+       FROM activity a
+       JOIN project_members pm ON pm.project_id = a.project_id AND pm.user_id = $1
+       LEFT JOIN users u ON u.id = a.user_id
+       LEFT JOIN objects t ON t.id = a.object_id AND t.type = 'task'
+       WHERE a.kind = 'completed' AND a.created_at > now() - ($2 || ' days')::interval
+       ORDER BY a.id DESC LIMIT 1000`,
+      [user.id, String(days)],
+    );
+    return {
+      items: rows.map((r) => ({
+        taskId: r.task_id,
+        title: r.task?.title ?? (/„(.*)“/.exec(r.summary)?.[1] ?? 'Aufgabe'),
+        projectId: r.project_id,
+        byId: r.user_id,
+        byName: r.user_name,
+        at: r.created_at,
+        recurring: !!r.task?.recurrence,
+        stillDone: !!r.task?.completedAt && !r.deleted,
+        deleted: !r.task || !!r.deleted,
+      })),
+    };
+  });
+
   // ---------- Synchronisierung ----------
 
   app.get('/api/sync/pull', async (req) => {
@@ -441,7 +623,7 @@ export async function buildApp({ config, db, pushTransport, logger = false }: Ap
   app.post('/api/push/test', async (req) => {
     const user = await requireUser(req);
     const delivered = await push.sendToUser(user.id, {
-      title: 'Do-it funktioniert 🎉',
+      title: 'Do-it funktioniert',
       body: 'So sehen deine Erinnerungen aus.',
       tag: 'test',
       url: '/settings',
@@ -476,7 +658,7 @@ export async function buildApp({ config, db, pushTransport, logger = false }: Ap
   // ---------- Claude-Anbindung: OAuth, MCP, Briefings ----------
 
   registerOAuth(app, { db, config, keys });
-  registerMcp(app, { db, config, sync, push });
+  registerMcp(app, { db, config, sync, push, hub });
 
   app.get('/api/briefings', async (req) => {
     const user = await requireUser(req);
@@ -521,7 +703,7 @@ export async function buildApp({ config, db, pushTransport, logger = false }: Ap
         .header('Cache-Control', 'no-cache')
         .header(
           'Content-Security-Policy',
-          "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss:; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+          "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss:; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'",
         )
         .sendFile('index.html');
     app.get('/', (req, reply) => sendIndex(reply));

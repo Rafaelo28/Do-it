@@ -16,8 +16,7 @@ export function LabelView({ name }: { name: string }) {
         <h1>@{name}</h1>
         <span className="sub">{list.length} offen</span>
       </div>
-      <QuickAdd initialText="" placeholder={`Neue Aufgabe mit @${name}`} key={name} />
-      <p className="small muted">Tipp: Schreib „@{name}“ in die Eingabe, um das Label zu setzen.</p>
+      <QuickAdd placeholder={`Neue Aufgabe mit @${name}`} defaults={{ labels: [name] }} key={name} />
       <TaskList tasks={list} />
     </div>
   );
@@ -48,7 +47,7 @@ export function SearchView() {
 
 export const FILTERS: Record<string, { title: string; empty: string; match: (t: Task, ctx: { me: string; today: string }) => boolean }> = {
   mine: { title: 'Mir zugewiesen', empty: 'Dir ist gerade nichts zugewiesen.', match: (t, c) => t.assigneeId === c.me },
-  p1: { title: 'Priorität 1', empty: 'Nichts Dringendes. 👍', match: (t) => t.priority === 1 },
+  p1: { title: 'Priorität 1', empty: 'Nichts Dringendes.', match: (t) => t.priority === 1 },
   nodate: { title: 'Ohne Datum', empty: 'Alle Aufgaben haben ein Datum.', match: (t) => !t.dueDate && !t.parentId },
   deadline: { title: 'Mit Deadline', empty: 'Keine Deadlines.', match: (t) => !!t.deadline },
 };

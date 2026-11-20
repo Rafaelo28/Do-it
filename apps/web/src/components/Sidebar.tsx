@@ -4,7 +4,7 @@ import { createProject } from '../lib/actions';
 import { useData } from '../lib/data';
 import { syncState } from '../lib/sync';
 import { useNow } from '../lib/time';
-import { IconCalendar, IconClock, IconFlag, IconInbox, IconPlus, IconSearch, IconSettings, IconSparkle, IconTag, IconToday, IconUser } from './Icons';
+import { IconCalendar, IconClock, IconDone, IconFlag, IconInbox, IconPlus, IconSearch, IconSettings, IconSparkle, IconTag, IconToday, IconUser } from './Icons';
 
 function NavLink({ href, icon, label, count, alert, onNavigate }: { href: string; icon: React.ReactNode; label: string; count?: number; alert?: boolean; onNavigate: () => void }) {
   const [location] = useLocation();
@@ -59,6 +59,7 @@ export function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () =>
       {inbox && <NavLink href={`/project/${inbox.id}`} icon={<IconInbox />} label="Eingang" count={countIn(inbox.id)} onNavigate={onNavigate} />}
       <NavLink href="/today" icon={<IconToday />} label="Heute" count={todayCount} alert={overdue} onNavigate={onNavigate} />
       <NavLink href="/upcoming" icon={<IconCalendar />} label="Demnächst" onNavigate={onNavigate} />
+      <NavLink href="/done" icon={<IconDone />} label="Erledigt" onNavigate={onNavigate} />
       <NavLink href="/search" icon={<IconSearch />} label="Suchen" onNavigate={onNavigate} />
       <NavLink href="/briefings" icon={<IconSparkle />} label="Briefings" onNavigate={onNavigate} />
 

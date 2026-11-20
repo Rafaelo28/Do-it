@@ -461,8 +461,11 @@ label.field > span {
 }
 
 .empty .big {
-  font-size: 2.4rem;
-  margin-bottom: 6px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 10px;
+  color: var(--accent);
+  opacity: 0.75;
 }
 
 /* ---------- Schnell-Eingabe ---------- */
@@ -695,19 +698,23 @@ button.chip:hover {
 
 .drag-handle {
   flex: none;
+  display: grid;
+  place-items: center;
   width: 14px;
+  height: 22px;
   margin: 1px -6px 0 -8px;
   color: var(--faint);
   cursor: grab;
   touch-action: none;
   user-select: none;
   opacity: 0;
-  letter-spacing: -3px;
-  font-size: 0.9rem;
-  line-height: 22px;
 }
 
 .task:hover .drag-handle {
+  opacity: 1;
+}
+
+.task:focus-within .drag-handle {
   opacity: 1;
 }
 
@@ -962,4 +969,92 @@ kbd {
   background: var(--hover);
   padding: 1px 4px;
   border-radius: 4px;
+}
+
+.done-item {
+  cursor: default;
+}
+
+.done-item .check {
+  cursor: default;
+}
+
+.done-item .task-title a:hover {
+  text-decoration: underline;
+}
+
+/* ---------- Sicherheit ---------- */
+
+code {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.88em;
+}
+
+.totp-setup {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 560px) {
+  .totp-setup {
+    grid-template-columns: 1fr;
+    justify-items: start;
+  }
+}
+
+.totp-setup .qr {
+  background: #fff;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+.totp-setup a {
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
+
+.totp-setup .secret {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--hover);
+  letter-spacing: 0.04em;
+  word-break: break-all;
+}
+
+.recovery-codes {
+  list-style: none;
+  margin: 0;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 6px 16px;
+  border-radius: 10px;
+  background: var(--hover);
+}
+
+.recovery-codes code {
+  font-size: 0.95rem;
+}
+
+.session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.session-list li {
+  display: grid;
+  gap: 2px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.session-list li:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
 }

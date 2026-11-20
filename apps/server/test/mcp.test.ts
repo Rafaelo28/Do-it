@@ -66,7 +66,7 @@ beforeAll(async () => {
   db = createDb(u.toString());
   await migrate(db);
   const built = await buildApp({
-    config: loadConfig({ DATABASE_URL: u.toString(), APP_URL: ORIGIN } as NodeJS.ProcessEnv),
+    config: loadConfig({ DATABASE_URL: u.toString(), APP_URL: ORIGIN, SETUP_CODE: 'MCP-TEST-1' } as NodeJS.ProcessEnv),
     db,
     pushTransport: {
       async send(_sub, payload) {
@@ -79,7 +79,9 @@ beforeAll(async () => {
   await app.listen({ port: 0, host: '127.0.0.1' });
   const addr = app.server.address();
   url = `http://127.0.0.1:${typeof addr === 'object' && addr ? addr.port : 0}`;
-  await req('POST', '/api/auth/setup', { body: { name: 'Rafael', email: 'r@example.org', password: 'geheim1234', timezone: 'Europe/Berlin' } });
+  await req('POST', '/api/auth/setup', {
+    body: { name: 'Rafael', email: 'r@example.org', password: 'geheim1234', timezone: 'Europe/Berlin', setupCode: 'MCP-TEST-1' },
+  });
   await req('POST', '/api/push/subscription', { body: { endpoint: 'https://push.example/r', keys: { p256dh: 'k', auth: 'a' } } });
 });
 

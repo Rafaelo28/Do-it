@@ -2,6 +2,8 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** vollständige Fehlerantwort des Servers (z. B. twoFactorRequired) */
+    readonly data: Record<string, unknown> = {},
   ) {
     super(message);
   }
@@ -32,7 +34,8 @@ export async function api<T = unknown>(method: string, path: string, body?: unkn
   }
   if (!res.ok) {
     if (res.status === 401 && !path.startsWith('/api/auth/')) onUnauthorized?.();
-    throw new ApiError(res.status, (json as { error?: string } | null)?.error ?? `Fehler ${res.status}`);
+    const data = json && typeof json === 'object' ? (json as Record<string, unknown>) : {};
+    throw new ApiError(res.status, typeof data.error === 'string' ? data.error : `Fehler ${res.status}`, data);
   }
   return json as T;
 }

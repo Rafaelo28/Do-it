@@ -8,10 +8,12 @@ Selbst gehostete Todo-App für eine kleine Gruppe – Aufgaben in normaler Sprac
 ## Was drin ist
 
 - **Eingabe in normaler Sprache** (Deutsch, nur Regeln, keine KI): Datum, Uhrzeit, Wochentage, Feiertage (inkl. Ostern), „jeden letzten Freitag im Monat“, „alle 3 Tage nach Erledigung“, Erinnerungen, Deadlines, Dauer, Priorität, `#Projekt`, `@Label`, `+Person`, „abwechselnd Anna und Ben“. Erkanntes wird beim Tippen markiert und lässt sich mit einem Tipp korrigieren.
-- **Projekte automatisch zuordnen**: über `#Name`, über den Projektnamen im Satz, über eigene Stichwörter pro Projekt und per Vorschlag aus deinen bisherigen Aufgaben.
+- **Projekte automatisch zuordnen**: einfach den Projektnamen in den Satz schreiben („Haushalt Bad putzen“), oder gezielt mit `.Name` bzw. `#Name` (auch abgekürzt: `.haus`). Dazu eigene Stichwörter pro Projekt und Vorschläge aus deinen bisherigen Aufgaben.
 - **Erinnerungen und Benachrichtigungen** auf Android, Desktop und iPad (als Home-Bildschirm-App), mit „Erledigt“, „In 1 Std.“ und „Morgen“ direkt in der Benachrichtigung, dazu ein Morgen-Briefing.
 - **Offline zuerst**: Jedes Gerät hat eine lokale Kopie, Änderungen werden im Hintergrund synchronisiert (feldweise, ohne Datenverlust bei gleichzeitigen Änderungen).
 - **Für ein paar Leute**: Einladungslinks, geteilte Projekte mit Rollen, Zuweisen, rotierende Haushaltsaufgaben, Kommentare, Verlauf.
+- **Erledigt-Übersicht**: alles, was in den letzten 7, 30 oder 90 Tagen erledigt wurde, nach Tagen sortiert, auch jede Runde wiederkehrender Aufgaben und was die anderen geschafft haben.
+- **Abgesichert**: Einrichtungscode fürs erste Konto, Zwei-Faktor-Anmeldung mit Authenticator-App, Geräteliste, strikte Browser-Sicherheitsregeln, Anfrage-Limits, gehärtete Container ([Absicherung](docs/betrieb.md#9-absicherung)).
 - **Claude-Anbindung** wie bei Todoist: MCP-Connector mit Anmeldung per Freigabe. Claude liest und pflegt Aufgaben und schreibt dir tägliche Briefings, die als Benachrichtigung ankommen ([docs/claude.md](docs/claude.md)).
 - **Kalender-Abo** (iCal), Todoist-Import, Mehrzeilen-Eingabe, „Teilen → Do-it“ auf Android, Tastenkürzel am Desktop.
 
@@ -32,6 +34,7 @@ Selbst gehostete Todo-App für eine kleine Gruppe – Aufgaben in normaler Sprac
 cd deploy
 cp .env.example .env      # Passwort und Cloudflare-Tunnel-Token eintragen
 docker compose up -d --build
+docker compose logs app | grep Einrichtungscode   # Code für das erste Konto
 ```
 
 Alles Weitere (Proxmox-VM, Cloudflare, Geräte, Backups, Updates) steht in **[docs/betrieb.md](docs/betrieb.md)**.

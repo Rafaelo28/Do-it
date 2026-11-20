@@ -7,10 +7,14 @@ import { currentSubscription, disablePush, enablePush, isIos, isStandalone, push
 import { toast } from '../lib/store';
 import { sync, syncState, wipeLocalData } from '../lib/sync';
 import { nowLocal, setTimeZone } from '../lib/time';
+import { IconWarn } from '../components/Icons';
+import { Sessions, TwoFactor } from './Security';
 
-function zones(): string[] {
+function zones(current: string): string[] {
   const fn = (Intl as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf;
-  return fn ? fn('timeZone') : ['Europe/Berlin', 'Europe/Vienna', 'Europe/Zurich', 'UTC'];
+  const list = fn ? fn('timeZone') : ['Europe/Berlin', 'Europe/Vienna', 'Europe/Zurich', 'UTC'];
+  // Die eigene Zeitzone muss immer wählbar sein (z. B. "UTC" fehlt in manchen Browsern)
+  return list.includes(current) ? list : [current, ...list];
 }
 
 export function SettingsView() {
@@ -29,6 +33,8 @@ export function SettingsView() {
       {me.isAdmin && <InviteAccount />}
       <TodoistImport me={me} />
       <Password />
+      <TwoFactor me={me} />
+      <Sessions />
       <section className="card" style={{ marginTop: 16, display: 'grid', gap: 10 }}>
         <strong>App</strong>
         <span className="small muted">
@@ -177,7 +183,7 @@ function Profile({ me }: { me: Me }) {
         <label className="field">
           <span>Zeitzone</span>
           <select className="input" value={tz} onChange={(e) => setTz(e.target.value)}>
-            {zones().map((z) => (
+            {zones(me.timezone).map((z) => (
               <option key={z}>{z}</option>
             ))}
           </select>
@@ -440,8 +446,8 @@ function TodoistImport({ me }: { me: Me }) {
             {plan.projects.length} Projekte · {plan.taskCount} Aufgaben · {plan.commentCount} Kommentare
           </span>
           {plan.warnings.slice(0, 5).map((w) => (
-            <span key={w} className="small">
-              ⚠ {w}
+            <span key={w} className="small row" style={{ gap: 6, flexWrap: 'nowrap' }}>
+              <IconWarn size={14} /> {w}
             </span>
           ))}
           {plan.warnings.length > 5 && <span className="small">… und {plan.warnings.length - 5} weitere Hinweise</span>}

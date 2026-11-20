@@ -20,6 +20,7 @@ import type { Config } from './config';
 import type { Db } from './db';
 import { authenticateBearer, type BearerAuth } from './oauth';
 import type { PushService } from './push';
+import type { Hub } from './hub';
 import type { SyncService } from './sync';
 
 interface Deps {
@@ -27,6 +28,7 @@ interface Deps {
   config: Config;
   sync: SyncService;
   push: PushService;
+  hub: Hub;
 }
 
 interface TaskRow {
@@ -128,7 +130,7 @@ async function memberNames(db: Db, userId: string): Promise<Map<string, string>>
 
 function line(t: TaskRow, today: string, names: Map<string, string>, opts: { project?: boolean } = {}): string {
   const d = t.data;
-  const parts = [d.completedAt ? `✓ ${d.title}` : d.title];
+  const parts = [d.completedAt ? `[erledigt] ${d.title}` : d.title];
   if (d.dueDate) parts.push(`fällig ${formatDateRelative(d.dueDate, today)}${d.dueTime ? ` ${d.dueTime}` : ''}`);
   if (d.recurrence) parts.push(describeRecurrence(d.recurrence));
   if (d.deadline) parts.push(`Deadline ${formatDateRelative(d.deadline, today)}`);
@@ -174,7 +176,7 @@ function findProject(projects: ProjectRow[], name: string): ProjectRow | undefin
 // ---------- Server mit Werkzeugen ----------
 
 function buildServer(deps: Deps, auth: BearerAuth): McpServer {
-  const { db, sync, push } = deps;
+  const { db, sync, push, hub } = deps;
   const user = auth.user;
   const canWrite = auth.scopes.has('tasks:write');
   const server = new McpServer({ name: 'do-it', title: 'Do-it', version: '1.0.0' }, { instructions: INSTRUCTIONS });
@@ -602,6 +604,7 @@ function buildServer(deps: Deps, auth: BearerAuth): McpServer {
       if (!canWrite) return denied();
       const id = uuidv7();
       await db.query('INSERT INTO briefings(id, user_id, title, body, source) VALUES ($1, $2, $3, $4, $5)', [id, user.id, a.title, a.text, 'claude']);
+      hub.poke([user.id]);
       let delivered = 0;
       if (a.notify) {
         const preview = a.text

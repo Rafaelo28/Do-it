@@ -23,6 +23,8 @@ export interface SyncState {
   projectIds: string[];
   /** erste vollständige Synchronisierung abgeschlossen (oder lokale Daten vorhanden) */
   ready: boolean;
+  /** neuestes Briefing laut Server */
+  briefingAt: string | null;
 }
 
 export const syncState = createStore<SyncState>({
@@ -33,6 +35,7 @@ export const syncState = createStore<SyncState>({
   members: [],
   projectIds: [],
   ready: false,
+  briefingAt: null,
 });
 
 const OBJECT_TABLES = () => [db.projects, db.sections, db.tasks, db.labels, db.reminders, db.comments];
@@ -246,7 +249,13 @@ class SyncEngine {
     await db.setMeta('projectIds', resp.projectIds);
     await db.setMeta('members', resp.members);
     await db.setMeta('me', resp.me);
-    syncState.set((s) => ({ ...s, me: resp.me, members: resp.members, projectIds: resp.projectIds }));
+    syncState.set((s) => ({
+      ...s,
+      me: JSON.stringify(s.me) === JSON.stringify(resp.me) ? s.me : resp.me,
+      members: JSON.stringify(s.members) === JSON.stringify(resp.members) ? s.members : resp.members,
+      projectIds: s.projectIds.join() === resp.projectIds.join() ? s.projectIds : resp.projectIds,
+      briefingAt: resp.briefingAt ?? null,
+    }));
   }
 
   private async apply(objects: SyncObject[], clearFirst: boolean): Promise<void> {

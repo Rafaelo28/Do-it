@@ -79,7 +79,8 @@ export async function createTaskFromParse(r: ParseResult, opts: CreateOptions): 
   if (r.newProjectName) projectId = await createProject(r.newProjectName);
   const parentId = opts.parentId ?? null;
   const sectionId = projectId === opts.projectId ? (opts.sectionId ?? null) : null;
-  await ensureLabels(r.labels);
+  const labels = [...new Set([...(opts.defaults?.labels ?? []), ...r.labels])];
+  await ensureLabels(labels);
   const id = uuidv7();
   const data: Partial<TaskData> = {
     ...opts.defaults,
@@ -95,7 +96,7 @@ export async function createTaskFromParse(r: ParseResult, opts: CreateOptions): 
     recurrence: r.recurrence,
     assigneeId: r.assigneeId,
     rotation: r.rotation,
-    labels: r.labels,
+    labels,
     sortKey: await nextTaskKey(projectId, parentId),
     createdBy: opts.me.id,
     createdAt: new Date().toISOString(),

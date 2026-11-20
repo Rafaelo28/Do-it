@@ -1,97 +1,11 @@
-import { z } from 'zod';
-import { isPlainDate, isPlainTime } from './dates';
-import { UUID_RE } from './ids';
+import type { z } from 'zod';
+import type { commentSchema, labelSchema, projectSchema, recurrenceSchema, reminderSchema, sectionSchema, taskSchema } from './schemas';
 
-export const idSchema = z.string().regex(UUID_RE, 'ungültige ID');
-const dateSchema = z.string().refine(isPlainDate, 'ungültiges Datum');
-const timeSchema = z.string().refine(isPlainTime, 'ungültige Uhrzeit');
-const isoSchema = z.string().max(40);
-const weekday = z.number().int().min(1).max(7);
+// Dieses Modul ist bewusst frei von Zod-Laufzeitcode, damit die Web-App die Bibliothek nicht mitladen muss.
+// Die Schemas selbst liegen in ./schemas (nur Server).
 
-export const recurrenceSchema = z.strictObject({
-  freq: z.enum(['day', 'week', 'month', 'year']),
-  interval: z.number().int().min(1).max(999),
-  weekdays: z.array(weekday).max(7).optional(),
-  monthDay: z.number().int().min(-1).max(31).optional(),
-  nthWeekday: z.strictObject({ n: z.number().int().min(-1).max(5), weekday }).optional(),
-  month: z.number().int().min(1).max(12).optional(),
-  afterCompletion: z.boolean().optional(),
-  until: dateSchema.optional(),
-});
-
-export const projectSchema = z.strictObject({
-  name: z.string().trim().min(1).max(120),
-  color: z.string().max(20).nullable(),
-  isInbox: z.boolean(),
-  parentId: idSchema.nullable(),
-  sortKey: z.string().max(100),
-  archived: z.boolean(),
-  aliases: z.array(z.string().trim().min(1).max(60)).max(30),
-});
-
-export const sectionSchema = z.strictObject({
-  projectId: idSchema,
-  name: z.string().trim().min(1).max(120),
-  sortKey: z.string().max(100),
-});
-
-export const taskSchema = z.strictObject({
-  projectId: idSchema,
-  sectionId: idSchema.nullable(),
-  parentId: idSchema.nullable(),
-  title: z.string().trim().min(1).max(500),
-  description: z.string().max(20000),
-  priority: z.number().int().min(1).max(4),
-  dueDate: dateSchema.nullable(),
-  dueTime: timeSchema.nullable(),
-  deadline: dateSchema.nullable(),
-  durationMin: z.number().int().min(1).max(10080).nullable(),
-  recurrence: recurrenceSchema.nullable(),
-  assigneeId: idSchema.nullable(),
-  rotation: z.array(idSchema).max(20),
-  labels: z.array(z.string().trim().min(1).max(60)).max(30),
-  completedAt: isoSchema.nullable(),
-  completedBy: idSchema.nullable(),
-  lastCompletedAt: isoSchema.nullable(),
-  lastCompletedBy: idSchema.nullable(),
-  sortKey: z.string().max(100),
-  createdBy: idSchema.nullable(),
-  createdAt: isoSchema,
-});
-
-export const labelSchema = z.strictObject({
-  name: z.string().trim().min(1).max(60),
-  color: z.string().max(20).nullable(),
-});
-
-export const reminderSchema = z.strictObject({
-  taskId: idSchema,
-  kind: z.enum(['relative', 'absolute']),
-  /** Minuten vor Fälligkeit (relative) */
-  offsetMin: z.number().int().min(0).max(525600).nullable(),
-  /** fester Zeitpunkt in lokaler Zeit (absolute) */
-  date: dateSchema.nullable(),
-  time: timeSchema.nullable(),
-});
-
-export const commentSchema = z.strictObject({
-  taskId: idSchema,
-  body: z.string().trim().min(1).max(10000),
-  authorId: idSchema,
-  createdAt: isoSchema,
-});
-
-export const OBJECT_SCHEMAS = {
-  project: projectSchema,
-  section: sectionSchema,
-  task: taskSchema,
-  label: labelSchema,
-  reminder: reminderSchema,
-  comment: commentSchema,
-} as const;
-
-export type ObjectType = keyof typeof OBJECT_SCHEMAS;
-export const OBJECT_TYPES = Object.keys(OBJECT_SCHEMAS) as ObjectType[];
+export const OBJECT_TYPES = ['project', 'section', 'task', 'label', 'reminder', 'comment'] as const;
+export type ObjectType = (typeof OBJECT_TYPES)[number];
 
 export type Recurrence = z.infer<typeof recurrenceSchema>;
 export type ProjectData = z.infer<typeof projectSchema>;
@@ -167,17 +81,6 @@ export const DEFAULT_SETTINGS: UserSettings = {
   autoReminderMin: 0,
 };
 
-export const settingsSchema = z.strictObject({
-  morningTime: timeSchema,
-  noonTime: timeSchema,
-  afternoonTime: timeSchema,
-  eveningTime: timeSchema,
-  nightTime: timeSchema,
-  workEndTime: timeSchema,
-  briefingEnabled: z.boolean(),
-  briefingTime: timeSchema,
-  autoReminderMin: z.number().int().min(0).max(10080).nullable(),
-});
 
 export type Role = 'owner' | 'editor' | 'viewer';
 
@@ -188,6 +91,8 @@ export interface Me {
   timezone: string;
   isAdmin: boolean;
   settings: UserSettings;
+  /** Zwei-Faktor-Anmeldung aktiv */
+  twoFactor: boolean;
 }
 
 export interface MemberInfo {
