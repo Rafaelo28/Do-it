@@ -118,6 +118,23 @@ export async function updateTask(id: string, changes: Partial<TaskData>): Promis
   await sync.mutate('task', id, 'put', changes as Record<string, unknown>);
 }
 
+/** In ein anderes Projekt verschieben – Unteraufgaben ziehen mit, Zuständigkeit wird gelöst, wenn die Person dort fehlt. */
+export async function moveTask(id: string, projectId: string, memberIds: string[]): Promise<void> {
+  const all = await db.tasks.toArray();
+  const ids = [id];
+  for (let i = 0; i < ids.length; i++) for (const t of all) if (t.parentId === ids[i]) ids.push(t.id);
+  for (const tid of ids) {
+    const t = all.find((x) => x.id === tid)!;
+    const keep = (u: string | null) => !u || memberIds.includes(u);
+    await updateTask(tid, {
+      projectId,
+      sectionId: null,
+      ...(keep(t.assigneeId) ? {} : { assigneeId: null }),
+      ...(t.rotation.every((u) => memberIds.includes(u)) ? {} : { rotation: [] }),
+    });
+  }
+}
+
 export async function deleteTask(task: Task): Promise<void> {
   await sync.mutate('task', task.id, 'delete');
   toast(`„${task.title}“ gelöscht`);

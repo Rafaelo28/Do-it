@@ -257,6 +257,7 @@ export class SyncService {
       case 'task':
         projectId = value.projectId as string;
         await this.requireWrite(q, roles, user.id, projectId);
+        if (type === 'task') await this.checkTaskRefs(q, value as unknown as TaskData, projectId);
         break;
       case 'label':
         ownerId = user.id;
@@ -343,6 +344,10 @@ export class SyncService {
       }
     }
 
+    if (existing.type === 'task' && changed.some((k) => ['assigneeId', 'rotation', 'parentId', 'projectId'].includes(k))) {
+      await this.checkTaskRefs(q, merged as unknown as TaskData, projectId!, changed);
+    }
+
     await q.query(`UPDATE objects SET data = $2, clock = $3, project_id = $4, seq = nextval('sync_seq'), updated_at = now() WHERE id = $1`, [
       existing.id,
       merged,
@@ -365,6 +370,22 @@ export class SyncService {
           body: rotated ? after.title : `${user.name}: ${after.title}`,
           taskId: existing.id,
         });
+      }
+    }
+  }
+
+  /** Zuständige müssen Projektmitglieder sein, Hauptaufgaben im selben Projekt liegen. */
+  private async checkTaskRefs(q: Queryable, t: TaskData, projectId: string, changed?: string[]): Promise<void> {
+    const touches = (k: string) => !changed || changed.includes(k);
+    if (t.parentId && (touches('parentId') || touches('projectId'))) {
+      const parent = await q.one<{ project_id: string }>(`SELECT project_id FROM objects WHERE id = $1 AND type = 'task' AND NOT deleted`, [t.parentId]);
+      if (!parent || parent.project_id !== projectId) throw new Rejection('Die Hauptaufgabe liegt in einem anderen Projekt');
+    }
+    if (touches('assigneeId') || touches('rotation') || touches('projectId')) {
+      const people = [...new Set([t.assigneeId, ...t.rotation].filter((x): x is string => !!x))];
+      if (people.length) {
+        const rows = await q.query('SELECT user_id FROM project_members WHERE project_id = $1 AND user_id = ANY($2::uuid[])', [projectId, people]);
+        if (rows.length < people.length) throw new Rejection('Zuständige Person ist kein Mitglied des Projekts');
       }
     }
   }

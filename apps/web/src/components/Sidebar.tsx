@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'wouter';
 import { createProject } from '../lib/actions';
 import { useData } from '../lib/data';
@@ -30,6 +30,12 @@ export function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () =>
   const mine = (t: (typeof tasks)[number]) => !t.assigneeId || t.assigneeId === me?.id;
   const todayCount = open_.filter((t) => t.dueDate && t.dueDate <= now.date && mine(t)).length;
   const overdue = open_.some((t) => t.dueDate && t.dueDate < now.date && mine(t));
+  // Zahl auf dem App-Symbol (installierte App auf Desktop und iPad)
+  useEffect(() => {
+    const nav = navigator as Navigator & { setAppBadge?: (n: number) => Promise<void>; clearAppBadge?: () => Promise<void> };
+    if (todayCount) void nav.setAppBadge?.(todayCount).catch(() => {});
+    else void nav.clearAppBadge?.().catch(() => {});
+  }, [todayCount]);
   const countIn = (pid: string) => open_.filter((t) => t.projectId === pid && !t.parentId).length;
 
   async function addProject() {

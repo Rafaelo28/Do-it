@@ -223,6 +223,12 @@ describe('Server', () => {
     const rename = await ben.push([{ type: 'project', id: haushalt, data: { name: 'Meins' } }]);
     expect(rename.json.rejected).toHaveLength(1);
 
+    // Zuweisen nur an Mitglieder; Hauptaufgabe muss im selben Projekt liegen
+    const stranger = await ben.push([{ type: 'task', id: uuidv7(), data: { projectId: haushalt, title: 'X', assigneeId: uuidv7(), createdAt: 'x' } }]);
+    expect(stranger.json.rejected[0]?.reason).toMatch(/kein Mitglied/);
+    const wrongParent = await anna.push([{ type: 'task', id: uuidv7(), data: { projectId: annaInbox, parentId: task1, title: 'Y', createdAt: 'x' } }]);
+    expect(wrongParent.json.rejected[0]?.reason).toMatch(/anderen Projekt/);
+
     const members = await anna.req<{ members: { role: string }[] }>('GET', `/api/projects/${haushalt}/members`);
     expect(members.json.members.map((m) => m.role)).toEqual(['owner', 'editor']);
     const activity = await anna.req<{ activity: { summary: string }[] }>('GET', `/api/projects/${haushalt}/activity`);

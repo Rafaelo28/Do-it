@@ -145,3 +145,10 @@ pnpm test                                                        # alle Tests (S
 ```
 
 Für den Vite-Dev-Server muss der Server die Origin kennen: `ALLOWED_ORIGINS=http://localhost:5173`.
+
+**Ende-zu-Ende-Test im Browser** (Einrichtung, Einladung, geteiltes Projekt, Live-Sync, Offline-Betrieb): Server mit *leerer* Datenbank und gebauter Web-App starten, dann
+
+```bash
+npx playwright install chromium   # einmalig
+E2E_URL=http://localhost:8080 pnpm e2e
+```

@@ -7,7 +7,7 @@ import { IconBack, IconBell, IconCheck, IconTrash } from '../components/Icons';
 import { QuickAdd } from '../components/QuickAdd';
 import { TaskList } from '../components/TaskList';
 import { PRIORITY_COLOR, reminderLabel } from '../components/ui';
-import { addComment, addReminder, deleteComment, deleteReminder, deleteTask, ensureLabels, toggleTask, updateTask } from '../lib/actions';
+import { addComment, addReminder, deleteComment, deleteReminder, deleteTask, ensureLabels, moveTask, toggleTask, updateTask } from '../lib/actions';
 import { useData } from '../lib/data';
 import { db, type Task } from '../lib/db';
 import { syncState } from '../lib/sync';
@@ -180,7 +180,7 @@ function Detail({ task }: { task: Task }) {
 
         <label className="field">
           <span>Projekt</span>
-          <select className="input" value={task.projectId} disabled={readOnly} onChange={(e) => set({ projectId: e.target.value, sectionId: null })}>
+          <select className="input" value={task.projectId} disabled={readOnly || !!task.parentId} onChange={(e) => void moveTask(task.id, e.target.value, members.filter((m) => m.projectId === e.target.value).map((m) => m.userId))}>
             {projects
               .filter((p) => !p.archived || p.id === task.projectId)
               .map((p) => (
