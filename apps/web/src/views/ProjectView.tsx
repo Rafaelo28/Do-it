@@ -7,6 +7,7 @@ import { Modal } from '../components/ui';
 import { createSection, deleteProject, updateProject } from '../lib/actions';
 import { api } from '../lib/api';
 import { useData } from '../lib/data';
+import { dragState, type DragState } from '../lib/dnd';
 import type { Project } from '../lib/db';
 import { toast } from '../lib/store';
 import { sync, syncState } from '../lib/sync';
@@ -21,6 +22,7 @@ export function ProjectView({ id }: { id: string }) {
   const [settings, setSettings] = useState(false);
   const [newSection, setNewSection] = useState<string | null>(null);
   const [addIn, setAddIn] = useState<string | null>(null);
+  const drag = dragState.use();
 
   if (!project) return <div className="page">{loaded && <div className="empty">Projekt nicht gefunden.</div>}</div>;
 
@@ -52,14 +54,18 @@ export function ProjectView({ id }: { id: string }) {
 
       {myRole !== 'viewer' && <QuickAdd projectId={id} key={id} />}
 
-      <TaskList tasks={unsectioned} showProject={false} />
+      <div data-drop-section="" className={dropZoneClass(drag, '')}>
+        <TaskList tasks={unsectioned} showProject={false} sortable={myRole !== 'viewer'} />
+      </div>
 
       {projectSections.map((s) => (
         <section key={s.id}>
           <div className="group-head">
             {s.name} <span className="muted">{projectTasks.filter((t) => t.sectionId === s.id && !t.parentId).length || ''}</span>
           </div>
-          <TaskList tasks={projectTasks.filter((t) => t.sectionId === s.id)} showProject={false} />
+          <div data-drop-section={s.id} className={dropZoneClass(drag, s.id)}>
+            <TaskList tasks={projectTasks.filter((t) => t.sectionId === s.id)} showProject={false} sortable={myRole !== 'viewer'} />
+          </div>
           {myRole !== 'viewer' &&
             (addIn === s.id ? (
               <div style={{ margin: '8px 0' }}>
@@ -107,6 +113,10 @@ export function ProjectView({ id }: { id: string }) {
       {settings && <ProjectSettings project={project} role={myRole} onClose={() => setSettings(false)} />}
     </div>
   );
+}
+
+function dropZoneClass(drag: DragState, section: string): string {
+  return drag.id ? `drop-zone ${drag.overSection === section && !drag.overId ? 'active' : ''}` : '';
 }
 
 interface MemberRow {

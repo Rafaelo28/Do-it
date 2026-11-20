@@ -99,6 +99,23 @@ try {
   assert.equal(await bad.count(), 1, 'wiederkehrende Aufgabe bleibt sichtbar');
   step('Wiederkehrende Aufgabe springt weiter');
 
+  // Sortieren per Ziehen (Maus): "Glühbirne wechseln" ganz nach oben
+  const from = anna.page.locator('li.task', { hasText: 'Glühbirne wechseln' });
+  await from.hover();
+  const h = await from.locator('.drag-handle').boundingBox();
+  const top = await anna.page.locator('li.task').first().boundingBox();
+  await anna.page.mouse.move(h.x + h.width / 2, h.y + h.height / 2);
+  await anna.page.mouse.down();
+  await anna.page.mouse.move(top.x + 80, top.y + 4, { steps: 8 });
+  await anna.page.mouse.up();
+  await anna.page.waitForTimeout(400);
+  assert.equal((await anna.page.locator('li.task .task-title').first().textContent())?.trim(), 'Glühbirne wechseln');
+  await anna.page.reload();
+  await anna.page.getByRole('heading', { name: 'Haushalt' }).waitFor();
+  await anna.page.locator('li.task').first().waitFor();
+  assert.equal((await anna.page.locator('li.task .task-title').first().textContent())?.trim(), 'Glühbirne wechseln');
+  step('Sortieren per Ziehen bleibt nach dem Neuladen');
+
   if (SHOTS) {
     await anna.page.screenshot({ path: `${SHOTS}/e2e-anna.png` });
     await ben.page.screenshot({ path: `${SHOTS}/e2e-ben.png` });

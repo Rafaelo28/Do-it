@@ -2,6 +2,7 @@ import { isOverdue } from '@do-it/shared';
 import { useLocation } from 'wouter';
 import { toggleTask } from '../lib/actions';
 import { useData } from '../lib/data';
+import { dragState, startDrag } from '../lib/dnd';
 import type { Task } from '../lib/db';
 import { syncState } from '../lib/sync';
 import { useNow } from '../lib/time';
@@ -20,7 +21,7 @@ export function byDue(a: Task, b: Task): number {
   return a.sortKey < b.sortKey ? -1 : 1;
 }
 
-export function TaskItem({ task, showProject = true, sub = false }: { task: Task; showProject?: boolean; sub?: boolean }) {
+export function TaskItem({ task, showProject = true, sub = false, sortable = false }: { task: Task; showProject?: boolean; sub?: boolean; sortable?: boolean }) {
   const { projectMap, reminders, tasks } = useData();
   const { me, members } = syncState.use();
   const now = useNow();
@@ -31,15 +32,32 @@ export function TaskItem({ task, showProject = true, sub = false }: { task: Task
   const subCount = tasks.filter((t) => t.parentId === task.id).length;
   const subDone = tasks.filter((t) => t.parentId === task.id && t.completedAt).length;
   const assignee = task.assigneeId ? members.find((m) => m.userId === task.assigneeId) : undefined;
+  const drag = dragState.use();
+  const canDrag = sortable && !sub && !task.completedAt;
+  const dropClass = drag.id && drag.overId === task.id ? (drag.pos === 'before' ? 'drop-before' : 'drop-after') : '';
 
   return (
     <li
-      className={`task ${task.completedAt ? 'completed' : ''} ${sub ? 'sub' : ''}`}
+      className={`task ${task.completedAt ? 'completed' : ''} ${sub ? 'sub' : ''} ${drag.id === task.id ? 'dragging' : ''} ${dropClass}`}
+      data-task-id={task.id}
+      data-section-id={task.sectionId ?? ''}
+      data-sortable={canDrag ? '1' : undefined}
       onClick={() => navigate(`/task/${task.id}`)}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => e.key === 'Enter' && e.target === e.currentTarget && navigate(`/task/${task.id}`)}
     >
+      {canDrag && (
+        <span
+          className="drag-handle"
+          aria-label="Ziehen zum Sortieren"
+          title="Ziehen zum Sortieren"
+          onPointerDown={(e) => startDrag(e, task.id, task.projectId)}
+          onClick={(e) => e.stopPropagation()}
+        >
+          ⋮⋮
+        </span>
+      )}
       <button
         className={`check ${task.completedAt ? 'done' : ''}`}
         style={{ '--pc': PRIORITY_COLOR[task.priority] } as React.CSSProperties}
@@ -100,7 +118,17 @@ export function TaskItem({ task, showProject = true, sub = false }: { task: Task
   );
 }
 
-export function TaskList({ tasks, showProject = true, showSubtasks = true }: { tasks: Task[]; showProject?: boolean; showSubtasks?: boolean }) {
+export function TaskList({
+  tasks,
+  showProject = true,
+  showSubtasks = true,
+  sortable = false,
+}: {
+  tasks: Task[];
+  showProject?: boolean;
+  showSubtasks?: boolean;
+  sortable?: boolean;
+}) {
   const { tasks: all } = useData();
   const ids = new Set(tasks.map((t) => t.id));
   // Unteraufgaben erscheinen unter ihrer Hauptaufgabe, wenn diese in der Liste ist.
@@ -108,17 +136,31 @@ export function TaskList({ tasks, showProject = true, showSubtasks = true }: { t
   return (
     <ul className="task-list">
       {top.map((t) => (
-        <TaskBranch key={t.id} task={t} all={all} visible={ids} showProject={showProject} showSubtasks={showSubtasks} />
+        <TaskBranch key={t.id} task={t} all={all} visible={ids} showProject={showProject} showSubtasks={showSubtasks} sortable={sortable} />
       ))}
     </ul>
   );
 }
 
-function TaskBranch({ task, all, visible, showProject, showSubtasks }: { task: Task; all: Task[]; visible: Set<string>; showProject: boolean; showSubtasks: boolean }) {
+function TaskBranch({
+  task,
+  all,
+  visible,
+  showProject,
+  showSubtasks,
+  sortable,
+}: {
+  task: Task;
+  all: Task[];
+  visible: Set<string>;
+  showProject: boolean;
+  showSubtasks: boolean;
+  sortable: boolean;
+}) {
   const children = showSubtasks ? all.filter((t) => t.parentId === task.id && visible.has(t.id)) : [];
   return (
     <>
-      <TaskItem task={task} showProject={showProject} sub={!!task.parentId && visible.has(task.parentId)} />
+      <TaskItem task={task} showProject={showProject} sub={!!task.parentId && visible.has(task.parentId)} sortable={sortable} />
       {children.map((c) => (
         <TaskItem key={c.id} task={c} showProject={false} sub />
       ))}

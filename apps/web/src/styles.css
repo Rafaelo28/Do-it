@@ -691,6 +691,55 @@ button.chip:hover {
   font-size: 0.85rem;
 }
 
+/* ---------- Sortieren ---------- */
+
+.drag-handle {
+  flex: none;
+  width: 14px;
+  margin: 1px -6px 0 -8px;
+  color: var(--faint);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  opacity: 0;
+  letter-spacing: -3px;
+  font-size: 0.9rem;
+  line-height: 22px;
+}
+
+.task:hover .drag-handle {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .drag-handle {
+    opacity: 0.55;
+    width: 20px;
+  }
+}
+
+.task.dragging {
+  opacity: 0.35;
+}
+
+.task.drop-before {
+  box-shadow: inset 0 3px 0 var(--accent);
+}
+
+.task.drop-after {
+  box-shadow: inset 0 -3px 0 var(--accent);
+}
+
+.drop-zone {
+  min-height: 28px;
+  border-radius: 8px;
+}
+
+.drop-zone.active {
+  outline: 2px dashed var(--accent);
+  outline-offset: 2px;
+}
+
 /* ---------- Detail ---------- */
 
 .detail-title {
