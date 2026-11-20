@@ -21,6 +21,31 @@
 
 ---
 
+## Umsetzungsstand (20.11.2026)
+
+| Phase | Stand | Was drin ist |
+|---|---|---|
+| 0 – Fundament | ✅ fertig | pnpm-Monorepo, TypeScript, Vitest, GitHub Actions (Typecheck, Tests mit Postgres, Build, Docker-Build) |
+| 1 – Kern-App offline | ✅ fertig | PWA mit IndexedDB, Ansichten Heute/Demnächst/Projekte/Labels/Suche/Filter, Unteraufgaben, Abschnitte, Sortieren per Ziehen, Parser mit Live-Markierung |
+| 2 – Sync + Server | ✅ fertig | Cursor-Sync mit feldweisem Mergen, WebSocket-Anstupser, Docker-Image, Compose mit Cloudflare Tunnel, Backups, Update-/Restore-Skripte |
+| 3 – Erinnerungen | ✅ fertig | Web Push (VAPID automatisch), Erinnerungs-Dienst mit Zeitzonen, Aktionen Erledigt/In 1 Std./Morgen, Morgen-Briefing, App-Badge |
+| 4 – Gemeinsam | ✅ fertig | Einladungslinks, Rollen, Zuweisen, Rotation, Kommentare, Verlauf, Benachrichtigung bei Zuweisung und Kommentar |
+| 5 – Schlauer Parser | ✅ weitgehend | 174 Korpus-Sätze, Feiertage, Jahreszeiten, „außer“, Projekt-Aliasse, lokal gelernte Projektvorschläge, Mehrzeilen-Eingabe, Teilen-Ziel |
+| 6 – Extras | 🟡 teilweise | ✅ Kalender-Abo, Filter, Todoist-Import (CSV), Tastenkürzel · ⏳ Statistiken, ntfy/E-Mail-Kanal, Passwort-Reset per Mail (braucht SMTP), Passkeys |
+
+**Abweichungen vom ursprünglichen Plan** (bewusst, zugunsten von Einfachheit):
+- Statt Drizzle ORM: eine schlanke eigene Query-Schicht mit SQL-Migrationen.
+- Statt einzelner Tabellen pro Objekttyp: eine Tabelle `objects` (Typ, Projekt, Besitzer, JSON-Daten, Feld-Uhren, `seq`). Das macht den Sync einfach und robust. Abgeleitet daraus gibt es `reminder_schedule` für den Erinnerungs-Dienst.
+- Statt Better Auth: eigener, kleiner Login mit scrypt und Sitzungs-Cookies.
+- Statt `rrule`: eigene Wiederholungs-Logik als JSON (siehe `packages/shared/src/recurrence.ts`).
+- Keine KI, wie besprochen.
+
+**Getestet:** 202 automatische Tests (Parser, Datum/Zeitzonen/Wiederholungen, Server-Integration gegen echte PostgreSQL, Todoist-Import) und ein Ende-zu-Ende-Test im Browser mit zwei Geräten. Er deckt Einladung, Live-Sync, Offline-Betrieb, App-Start ohne Netz und Sortieren ab. Das Docker-Image und der komplette Compose-Stapel (ohne Tunnel) wurden gebaut und gestartet, Backup und Restore ausprobiert.
+
+**Noch nicht real getestet** (geht nur bei euch): Push auf echten Android-/iPad-Geräten, der Cloudflare Tunnel mit `do-it.gerda-hilft.de`, der Betrieb auf der Proxmox-VM.
+
+---
+
 ## 1. Was die App anders macht (kein Todoist-Klon)
 
 Die Grundfunktionen (Projekte, Abschnitte, Unteraufgaben, Labels, Prioritäten, Wiederholungen) sind Pflicht. Abheben soll sich Do-it hier:
