@@ -1,0 +1,32 @@
+{
+  "name": "@do-it/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "node build.mjs",
+    "start": "node dist/main.js",
+    "worker": "node dist/worker.js",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@do-it/parser": "workspace:*",
+    "@do-it/shared": "workspace:*",
+    "@fastify/cookie": "^11.1.5",
+    "@fastify/static": "^10.1.12",
+    "@fastify/websocket": "^11.3.7",
+    "fastify": "^5.12.8",
+    "pg": "^8.23.1",
+    "web-push": "^4.0.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/pg": "^8.23.1",
+    "@types/web-push": "^3.6.4",
+    "@types/ws": "^8.18.2",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15"
+  }
+}
