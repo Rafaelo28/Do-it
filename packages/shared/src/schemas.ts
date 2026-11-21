@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { isPlainDate, isPlainTime } from './dates';
 import { UUID_RE } from './ids';
-import { OBJECT_TYPES, type ObjectType } from './model';
+import { OBJECT_TYPES, START_PAGE_PATTERN, type ObjectType } from './model';
 
 // Zod-Schemas zur Prüfung von Eingaben. Nur für den Server (Import: '@do-it/shared/schemas').
 
@@ -138,6 +138,7 @@ export const settingsSchema = z.strictObject({
     radius: z.enum(['round', 'soft', 'square']),
     textSize: z.enum(['normal', 'large']),
   }),
+  startPage: z.string().max(240).regex(START_PAGE_PATTERN),
 });
 
 export const mutationSchema = z.strictObject({

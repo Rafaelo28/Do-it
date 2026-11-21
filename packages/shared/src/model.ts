@@ -114,7 +114,12 @@ export interface UserSettings {
   /** eigene Filter */
   filters: SavedFilter[];
   appearance: Appearance;
+  /** Seite beim Öffnen der App, z. B. "/today", "/calendar", "/project/<id>" */
+  startPage: string;
 }
+
+/** erlaubte Startseiten (Pfade in der App) */
+export const START_PAGE_PATTERN = /^\/(today|upcoming|calendar|done|karma|project\/[\w-]{1,64}|f\/[\w-]{1,64}|filter\/(mine|p1|nodate|deadline)|label\/[^/?#\s]{1,200})$/;
 
 export const DEFAULT_SETTINGS: UserSettings = {
   morningTime: '08:00',
@@ -134,6 +139,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   views: {},
   filters: [],
   appearance: DEFAULT_APPEARANCE,
+  startPage: '/today',
 };
 
 

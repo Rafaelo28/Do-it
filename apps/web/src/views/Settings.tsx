@@ -13,16 +13,23 @@ import { sync, syncState, wipeLocalData } from '../lib/sync';
 import { nowLocal, setTimeZone } from '../lib/time';
 import {
   IconBell,
+  IconCalendar,
   IconCheck,
   IconChevronLeft,
   IconChevronRight,
   IconClock,
+  IconDone,
   IconDownload,
+  IconFilter,
+  IconFlag,
+  IconInbox,
   IconInfo,
   IconLeaf,
   IconLink,
   IconPalette,
   IconShield,
+  IconTag,
+  IconToday,
   IconUser,
   IconUsers,
   IconWarn,
@@ -32,7 +39,8 @@ import { TodoistImport } from './TodoistImport';
 import { ProfilePhoto } from '../components/AvatarEditor';
 import { addDays, WEEKDAYS_SHORT } from '@do-it/shared';
 import { refreshKarma } from '../lib/karma';
-import { Select } from '../components/Select';
+import { Dot, projectOptions, Select, type SelectOption } from '../components/Select';
+import { startPath } from '../lib/start';
 
 function zones(current: string): string[] {
   const fn = (Intl as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf;
@@ -51,7 +59,7 @@ interface Section {
 
 const SECTIONS: Section[] = [
   { id: 'konto', title: 'Konto', desc: 'Profilbild, Name, Zeitzone', icon: <IconUser /> },
-  { id: 'darstellung', title: 'Erscheinungsbild', desc: 'Akzentfarbe, Hell/Dunkel, Stil', icon: <IconPalette /> },
+  { id: 'darstellung', title: 'Erscheinungsbild', desc: 'Startseite, Akzentfarbe, Hell/Dunkel', icon: <IconPalette /> },
   { id: 'benachrichtigungen', title: 'Benachrichtigungen', desc: 'Push, Morgen-Briefing, Erinnerungen', icon: <IconBell /> },
   { id: 'zeiten', title: 'Tageszeiten', desc: 'Was „früh“ oder „abends“ heißt', icon: <IconClock /> },
   { id: 'karma', title: 'Karma', desc: 'Ziele, freie Tage, Urlaub', icon: <IconLeaf /> },
@@ -107,7 +115,12 @@ function SectionBody({ id, me }: { id: string; me: Me }) {
         </>
       );
     case 'darstellung':
-      return <AppearanceSettings me={me} />;
+      return (
+        <>
+          <StartPageSetting me={me} />
+          <AppearanceSettings me={me} />
+        </>
+      );
     case 'benachrichtigungen':
       return <Notifications me={me} />;
     case 'zeiten':
@@ -196,6 +209,40 @@ function AppInfo() {
 const PREVIEW_LINES = [70, 45, 58];
 
 /** Erscheinungsbild: Hell/Dunkel, Akzentfarbe, Stil, Ecken, Dichte, Schriftgröße */
+/** Seite, die beim Öffnen der App erscheint */
+function StartPageSetting({ me }: { me: Me }) {
+  const data = useData();
+  const { inbox, projects, labels } = data;
+  const current = startPath(me.settings, data);
+  const shared = syncState.select((s) => s.members.some((m) => m.userId !== me.id)) || me.settings.startPage === '/filter/mine';
+  const options: SelectOption<string>[] = [
+    { value: '/today', label: 'Heute', icon: <IconToday size={15} /> },
+    ...(inbox ? [{ value: `/project/${inbox.id}`, label: 'Eingang', icon: <IconInbox size={15} /> }] : []),
+    { value: '/upcoming', label: 'Demnächst', icon: <IconClock size={15} /> },
+    { value: '/calendar', label: 'Kalender', icon: <IconCalendar size={15} /> },
+    { value: '/done', label: 'Erledigt', icon: <IconDone size={15} /> },
+    ...(me.settings.karmaEnabled ? [{ value: '/karma', label: 'Karma', icon: <IconLeaf size={15} /> }] : []),
+    ...projectOptions(projects)
+      .filter((o) => o.value !== inbox?.id)
+      .map((o) => ({ ...o, value: `/project/${o.value}`, hint: o.depth ? undefined : 'Projekt' })),
+    ...(me.settings.filters ?? []).map((f) => ({ value: `/f/${f.id}`, label: f.name, icon: f.color ? <Dot color={f.color} /> : <IconFilter size={15} />, hint: 'Filter' })),
+    { value: '/filter/p1', label: 'Priorität 1', icon: <IconFlag size={15} />, hint: 'Filter' },
+    { value: '/filter/deadline', label: 'Mit Deadline', icon: <IconFlag size={15} />, hint: 'Filter' },
+    { value: '/filter/nodate', label: 'Ohne Datum', icon: <IconClock size={15} />, hint: 'Filter' },
+    ...(shared ? [{ value: '/filter/mine', label: 'Mir zugewiesen', icon: <IconUser size={15} />, hint: 'Filter' }] : []),
+    ...labels.map((l) => ({ value: `/label/${encodeURIComponent(l.name)}`, label: l.name, icon: <IconTag size={15} />, hint: 'Label' })),
+  ];
+  // gespeicherte Seite, die es nicht mehr gibt, nicht als leere Auswahl zeigen
+  const value = options.some((o) => o.value === current) ? current : '/today';
+  return (
+    <section className="card" style={{ marginTop: 16, display: 'grid', gap: 10 }}>
+      <strong>Startseite</strong>
+      <span className="small muted">Diese Seite erscheint, wenn du Do-it öffnest – auf allen deinen Geräten.</span>
+      <Select label="Startseite" value={value} options={options} searchable onChange={(startPage) => void updateSettings({ startPage })} />
+    </section>
+  );
+}
+
 function AppearanceSettings({ me }: { me: Me }) {
   const a: Appearance = { ...DEFAULT_APPEARANCE, ...me.settings.appearance };
   const timer = useRef<number | null>(null);

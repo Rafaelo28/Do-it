@@ -18,7 +18,7 @@ export default defineConfig({
         short_name: 'Do-it',
         description: 'Aufgaben in normaler Sprache – mit Erinnerungen und Sync.',
         lang: 'de',
-        start_url: '/today',
+        start_url: '/',
         scope: '/',
         display: 'standalone',
         background_color: '#f7f6f3',
