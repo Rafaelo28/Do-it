@@ -3,6 +3,7 @@ import { addDays, describeRecurrence, formatDateRelative, isoWeekday, startOfIso
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
+import { Avatar } from '../components/Avatar';
 import { IconBack, IconBell, IconCheck, IconTrash, IconX } from '../components/Icons';
 import { QuickAdd } from '../components/QuickAdd';
 import { TaskList } from '../components/TaskList';
@@ -60,6 +61,7 @@ function Detail({ task }: { task: Task }) {
   const children = tasks.filter((t) => t.parentId === task.id);
   const myReminders = reminders.filter((r) => r.taskId === task.id);
   const nameOf = (uid: string | null) => members.find((m) => m.userId === uid)?.name ?? 'Unbekannt';
+  const avatarOf = (uid: string | null) => members.find((m) => m.userId === uid)?.avatar ?? null;
   const recParse = recText ? parseTask(recText, { today: now.date, now: now.time }) : null;
 
   const set = (changes: Partial<TaskData>) => void updateTask(task.id, changes);
@@ -341,7 +343,8 @@ function Detail({ task }: { task: Task }) {
       <div style={{ display: 'grid', gap: 10 }}>
         {comments.map((c) => (
           <div key={c.id} className="comment">
-            <div className="small muted">
+            <div className="small muted comment-head">
+              <Avatar name={nameOf(c.authorId)} src={avatarOf(c.authorId)} size={20} seed={c.authorId} />
               {nameOf(c.authorId)} · {new Date(c.createdAt).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })}
               {c.authorId === me?.id && (
                 <button className="btn ghost small" style={{ minHeight: 0, padding: '0 6px' }} onClick={() => void deleteComment(c.id)}>

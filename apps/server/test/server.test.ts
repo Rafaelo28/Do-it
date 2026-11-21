@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { formatHlc, uuidv7, zonedParts, zonedToUtc, type Mutation, type PullResponse, type SyncObject } from '@do-it/shared';
+import { completeTaskChanges, formatHlc, uuidv7, zonedParts, zonedToUtc, type KarmaSummary, type Mutation, type PullResponse, type SyncObject, type TaskData } from '@do-it/shared';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app';
@@ -460,5 +460,102 @@ describe('Server', () => {
     } finally {
       await secure.app.close();
     }
+  });
+
+  it('Karma: Punkte, Tages- und Wochenziel, Rückgängig, neue Stufe', async () => {
+    const karma = async () => (await anna.req<KarmaSummary>('GET', '/api/karma')).json;
+    const k0 = await karma();
+    expect(k0.level.name).toBeTruthy();
+    // Ziele so legen, dass sie in diesem Test genau erreicht werden
+    await anna.req('PATCH', '/api/me', { settings: { dailyGoal: k0.today.done + 3, weeklyGoal: k0.week.done + 4 } });
+    const today = zonedParts(new Date(), 'Europe/Berlin').date;
+    const yesterday = new Date(Date.now() - 86400_000).toISOString().slice(0, 10);
+    const [t1, t2, t3, t4] = [uuidv7(), uuidv7(), uuidv7(), uuidv7()];
+    await anna.push([
+      { type: 'task', id: t1, data: { projectId: annaInbox, title: 'Wichtig heute', priority: 1, dueDate: today, createdAt: 'x' } },
+      { type: 'task', id: t2, data: { projectId: annaInbox, title: 'Irgendwann', createdAt: 'x' } },
+      { type: 'task', id: t3, data: { projectId: annaInbox, parentId: t2, title: 'Teil davon', createdAt: 'x' } },
+      { type: 'task', id: t4, data: { projectId: annaInbox, title: 'Überfällig', priority: 2, dueDate: yesterday, createdAt: 'x' } },
+    ]);
+    const done = (id: string) => anna.push([{ type: 'task', id, data: { completedAt: new Date().toISOString(), completedBy: annaId } }]);
+    const reopen = (id: string) => anna.push([{ type: 'task', id, data: { completedAt: null, completedBy: null } }]);
+
+    await done(t1); // 2 + P1 3 + pünktlich 1
+    expect((await karma()).points - k0.points).toBe(6);
+    await reopen(t1);
+    expect((await karma()).points).toBe(k0.points);
+    await done(t1);
+    await done(t2); // 2
+    sent.length = 0;
+    await done(t3); // Unteraufgabe 1 + Tagesziel 5
+    let k = await karma();
+    expect(k.points - k0.points).toBe(6 + 2 + 1 + 5);
+    expect(k.today).toMatchObject({ reached: true, done: k0.today.done + 3 });
+    expect(k.recent[0]).toMatchObject({ kind: 'daily_goal', points: 5 });
+    await done(t4); // 2 + P2 2, nicht pünktlich + Wochenziel 20
+    k = await karma();
+    expect(k.points - k0.points).toBe(14 + 4 + 20);
+    expect(k.week.reached).toBe(true);
+    if (k0.points < 30 && k.points >= 30) expect(sent.some((s) => s.payload.title === 'Neue Karma-Stufe: Keimling')).toBe(true);
+    // Wieder öffnen nimmt Punkte und weggefallene Ziel-Boni zurück
+    await reopen(t3); // Wochenziel fällt weg, Tagesziel bleibt (t4 zählt noch)
+    k = await karma();
+    expect(k.points - k0.points).toBe(38 - 1 - 20);
+    expect(k.week.reached).toBe(false);
+    expect(k.today.reached).toBe(true);
+    await reopen(t4); // jetzt fällt auch das Tagesziel weg
+    k = await karma();
+    expect(k.points - k0.points).toBe(17 - 4 - 5);
+    expect(k.today.reached).toBe(false);
+    expect(k.days).toHaveLength(28);
+    expect(k.days.at(-1)!.date).toBe(today);
+
+    // Wiederkehrend: Rückgängig zählt nicht doppelt und verschwindet aus "Erledigt"
+    const r = uuidv7();
+    await anna.push([{ type: 'task', id: r, data: { projectId: annaInbox, title: 'Gießen', dueDate: today, recurrence: { freq: 'day', interval: 1 }, createdAt: 'x' } }]);
+    const before = (await karma()).points;
+    const task = obj((await anna.pull()).json, r)!.data as unknown as TaskData;
+    const changes = completeTaskChanges(task, today, annaId, new Date().toISOString());
+    await anna.push([{ type: 'task', id: r, data: changes as Record<string, unknown> }]);
+    expect((await karma()).points - before).toBe(3 + 5); // 2 + pünktlich 1, erreicht wieder das Tagesziel
+    await anna.push([{ type: 'task', id: r, data: { dueDate: today, lastCompletedAt: null, lastCompletedBy: null } }]);
+    expect((await karma()).points).toBe(before);
+    const list = await anna.req<{ items: { taskId: string }[] }>('GET', '/api/completed?days=1');
+    expect(list.json.items.some((i) => i.taskId === r)).toBe(false);
+  });
+
+  it('Profilbild: hochladen, nur für Mitglieder sichtbar, löschen', async () => {
+    const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    expect((await anna.req('PUT', '/api/me/avatar', { image: `data:image/svg+xml;base64,${png}` })).status).toBe(400);
+    expect((await anna.req('PUT', '/api/me/avatar', { image: `data:image/jpeg;base64,${png}` })).status).toBe(400);
+    const big = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(310_000)]).toString('base64');
+    expect((await anna.req('PUT', '/api/me/avatar', { image: `data:image/jpeg;base64,${big}` })).status).toBe(413);
+
+    const up = await anna.req<{ user: { avatar: string } }>('PUT', '/api/me/avatar', { image: `data:image/png;base64,${png}` });
+    expect(up.status).toBe(200);
+    expect(up.json.user.avatar).toMatch(new RegExp(`^/api/avatars/${annaId}\\?v=\\d+$`));
+    const own = await app.inject({ method: 'GET', url: up.json.user.avatar, headers: { cookie: anna.cookie } });
+    expect(own.statusCode).toBe(200);
+    expect(own.headers['content-type']).toBe('image/png');
+    expect(String(own.headers['cache-control'])).toContain('immutable');
+    expect(own.rawPayload.equals(Buffer.from(png, 'base64'))).toBe(true);
+
+    // Ben teilt (wieder) ein Projekt mit Anna und sieht das Bild, Fremde nicht
+    const shared = uuidv7();
+    await anna.push([{ type: 'project', id: shared, data: { name: 'Gemeinsam', sortKey: 'b0' } }]);
+    const inv = await anna.req<{ token: string }>('POST', '/api/invites', { projectId: shared });
+    await ben.req('POST', `/api/invites/${inv.json.token}/accept`);
+    const benView = await app.inject({ method: 'GET', url: up.json.user.avatar, headers: { cookie: ben.cookie } });
+    expect(benView.statusCode).toBe(200);
+    expect((await ben.pull()).json.members.find((m) => m.userId === annaId)?.avatar).toBe(up.json.user.avatar);
+    const acc = await anna.req<{ token: string }>('POST', '/api/invites', {});
+    const clara = new Client();
+    await clara.req('POST', '/api/auth/register', { token: acc.json.token, name: 'Clara', email: 'clara@example.org', password: 'clara-geheim-1' });
+    expect((await app.inject({ method: 'GET', url: up.json.user.avatar, headers: { cookie: clara.cookie } })).statusCode).toBe(404);
+    expect((await new Client().req('GET', up.json.user.avatar)).status).toBe(401);
+
+    const del = await anna.req<{ user: { avatar: string | null } }>('DELETE', '/api/me/avatar');
+    expect(del.json.user.avatar).toBeNull();
+    expect((await app.inject({ method: 'GET', url: up.json.user.avatar, headers: { cookie: anna.cookie } })).statusCode).toBe(404);
   });
 });

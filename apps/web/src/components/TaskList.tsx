@@ -8,7 +8,8 @@ import { dragState, startDrag } from '../lib/dnd';
 import { syncState } from '../lib/sync';
 import { useNow } from '../lib/time';
 import { IconBell, IconCheck, IconClock, IconFlag, IconGrip, IconHash, IconRepeat, IconSubtasks, IconTag } from './Icons';
-import { dueLabel, durationLabel, initials, PRIORITY_COLOR } from './ui';
+import { Avatar } from './Avatar';
+import { dueLabel, durationLabel, PRIORITY_COLOR } from './ui';
 
 /** Fällige zuerst nach Datum/Uhrzeit, dann Priorität, dann manuelle Reihenfolge. */
 export function byDue(a: Task, b: Task): number {
@@ -29,6 +30,7 @@ interface ItemProps {
   subDone: number;
   hasReminder: boolean;
   assigneeName: string | null;
+  assigneeAvatar: string | null;
   today: string;
   nowTime: string;
   sub: boolean;
@@ -58,7 +60,7 @@ function sameTask(a: Task, b: Task): boolean {
 }
 
 const TaskRow = memo(
-  function TaskRow({ task, projectLabel, subCount, subDone, hasReminder, assigneeName, today, nowTime, sub, sortable }: ItemProps) {
+  function TaskRow({ task, projectLabel, subCount, subDone, hasReminder, assigneeName, assigneeAvatar, today, nowTime, sub, sortable }: ItemProps) {
     const me = syncState.select((s) => s.me);
     const [, navigate] = useLocation();
     const canDrag = sortable && !sub && !task.completedAt;
@@ -140,7 +142,7 @@ const TaskRow = memo(
             )}
             {assigneeName && (
               <span title={assigneeName}>
-                <span className="avatar">{initials(assigneeName)}</span>
+                <Avatar name={assigneeName} src={assigneeAvatar} size={18} seed={task.assigneeId ?? undefined} />
                 {task.rotation.length > 1 ? 'dran' : ''}
               </span>
             )}
@@ -156,6 +158,7 @@ const TaskRow = memo(
     a.subDone === b.subDone &&
     a.hasReminder === b.hasReminder &&
     a.assigneeName === b.assigneeName &&
+    a.assigneeAvatar === b.assigneeAvatar &&
     a.today === b.today &&
     a.nowTime === b.nowTime &&
     a.sub === b.sub &&
@@ -177,6 +180,7 @@ export function TaskList({
   const members = syncState.select((s) => s.members);
   const now = useNow();
   const memberNames = useMemo(() => new Map(members.map((m) => [m.userId, m.name])), [members]);
+  const memberAvatars = useMemo(() => new Map(members.map((m) => [m.userId, m.avatar])), [members]);
 
   const ids = new Set(tasks.map((t) => t.id));
   const childrenOf = new Map<string, Task[]>();
@@ -196,6 +200,7 @@ export function TaskList({
         subDone={stats?.done ?? 0}
         hasReminder={remindedTasks.has(t.id)}
         assigneeName={t.assigneeId ? (memberNames.get(t.assigneeId) ?? null) : null}
+        assigneeAvatar={t.assigneeId ? (memberAvatars.get(t.assigneeId) ?? null) : null}
         today={now.date}
         nowTime={t.dueDate === now.date && t.dueTime ? now.time : ''}
         sub={sub}

@@ -677,6 +677,9 @@ button.chip:hover {
   font-size: 0.68rem;
   font-weight: 700;
   flex: none;
+  object-fit: cover;
+  vertical-align: middle;
+  line-height: 1;
 }
 
 .group-head {
@@ -1057,4 +1060,366 @@ code {
 .session-list li:last-child {
   border-bottom: none;
   padding-bottom: 0;
+}
+
+/* ---------- Todoist-Import ---------- */
+
+.todoist-token {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.import-projects,
+.import-warnings {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.import-projects li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.import-warnings li {
+  padding-left: 10px;
+  border-left: 2px solid var(--border);
+}
+
+/* ---------- Profilbild ---------- */
+
+.avatar.initials {
+  color: #fff;
+  letter-spacing: 0.02em;
+  user-select: none;
+}
+
+img.avatar {
+  background: var(--hover);
+}
+
+.profile-photo {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.comment-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.crop-dialog {
+  width: min(360px, 100%);
+  display: grid;
+  gap: 12px;
+  justify-items: stretch;
+}
+
+.crop-frame {
+  position: relative;
+  margin: 0 auto;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #111;
+}
+
+.crop-frame canvas {
+  display: block;
+}
+
+.crop-frame canvas:active {
+  cursor: grabbing;
+}
+
+.crop-mask {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.5);
+  outline: 2px solid rgba(255, 255, 255, 0.85);
+  outline-offset: -2px;
+  pointer-events: none;
+}
+
+.crop-dialog input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+/* ---------- Profil + Karma in der Seitenleiste ---------- */
+
+.profile-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.profile-row:hover,
+.profile-row.active {
+  background: var(--hover);
+}
+
+.profile-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.profile-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-level {
+  font-size: 0.75rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-progress {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.profile-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+/* ---------- Karma ---------- */
+
+.weekday-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.weekday-chips .chip {
+  cursor: pointer;
+  min-width: 40px;
+  justify-content: center;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.chip.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.karma-hero {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.karma-ring-label {
+  font-size: 13px;
+  fill: var(--muted);
+}
+
+.karma-ring-level {
+  font-size: 30px;
+  font-weight: 700;
+  fill: var(--text);
+}
+
+.karma-hero-text {
+  display: grid;
+  gap: 8px;
+  flex: 1;
+  min-width: 200px;
+}
+
+.karma-level-name {
+  font-size: 1.35rem;
+}
+
+.karma-path {
+  display: flex;
+  gap: 4px;
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+}
+
+.karma-path li {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+}
+
+.karma-path li.past {
+  background: var(--accent-soft);
+}
+
+.karma-path li.now {
+  background: var(--accent);
+}
+
+.karma-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.karma-grid.two {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+@media (max-width: 720px) {
+  .karma-grid,
+  .karma-grid.two {
+    grid-template-columns: 1fr;
+  }
+}
+
+.karma-stat {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+
+.karma-stat strong {
+  font-size: 1.2rem;
+}
+
+.karma-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.karma-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--accent);
+  transition: width 0.4s ease;
+}
+
+.karma-chart {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(28, 1fr);
+  align-items: end;
+  gap: 3px;
+  height: 120px;
+  margin-top: 12px;
+}
+
+.karma-chart .day {
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  border-radius: 3px;
+}
+
+.karma-chart .day.rest {
+  background: repeating-linear-gradient(135deg, transparent 0 4px, var(--hover) 4px 8px);
+}
+
+.karma-chart .day > span {
+  display: block;
+  width: 100%;
+  min-height: 2px;
+  border-radius: 3px 3px 1px 1px;
+  background: var(--accent-soft);
+}
+
+.karma-chart .day.goal > span {
+  background: var(--accent);
+}
+
+.karma-chart .goal-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed var(--muted);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.karma-axis {
+  display: grid;
+  grid-template-columns: repeat(28, 1fr);
+  gap: 3px;
+  margin-top: 4px;
+  font-size: 0.7rem;
+}
+
+.karma-events {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.karma-events li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.karma-points {
+  flex: none;
+  min-width: 38px;
+  font-weight: 700;
+  color: var(--accent-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.karma-event-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.karma-rules ul {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.karma-rules li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.karma-rules svg {
+  color: var(--accent);
+  flex: none;
 }

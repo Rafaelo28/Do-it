@@ -22,6 +22,7 @@ import { authenticateBearer, type BearerAuth } from './oauth';
 import type { PushService } from './push';
 import type { Hub } from './hub';
 import type { SyncService } from './sync';
+import { karmaSummary } from './karma';
 
 interface Deps {
   db: Db;
@@ -225,6 +226,14 @@ function buildServer(deps: Deps, auth: BearerAuth): McpServer {
       out.push(`\n## Ohne Datum\n- ${noDate.length} offene Aufgaben ohne Datum`);
       out.push(`\n## Erledigt in den letzten 24 Stunden (${done.length})`);
       out.push(done.length ? done.map((d) => `- ${d.summary}`).join('\n') : '- nichts');
+      const k = await karmaSummary(db, user);
+      if (k.enabled) {
+        out.push(
+          `\n## Karma\n- Stufe ${k.level.level} (${k.level.name}), ${k.points} Punkte${k.level.next ? `, noch ${k.level.next.min - k.points} bis ${k.level.next.name}` : ''}` +
+            `\n- Heute ${k.today.done} von ${k.today.goal} erledigt (Tagesziel), diese Woche ${k.week.done} von ${k.week.goal}` +
+            `\n- Serie: ${k.streak.current} Tage in Folge (Rekord ${k.streak.best})`,
+        );
+      }
       out.push('\n## Projekte');
       for (const p of projects) {
         const count = open.filter((t) => t.project_id === p.id && !t.data.parentId).length;

@@ -129,6 +129,17 @@ export const IconSparkle = (p: P) => (
     <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />
   </Svg>
 );
+export const IconFlame = (p: P) => (
+  <Svg {...p}>
+    <path d="M12 3c.5 3-2 4.5-2 7a2 2 0 0 0 4 0c0-.8-.3-1.5-.6-2.1C15.6 9.3 18 11.6 18 15a6 6 0 0 1-12 0c0-4.4 3.6-6.3 6-12z" />
+  </Svg>
+);
+export const IconLeaf = (p: P) => (
+  <Svg {...p}>
+    <path d="M5 19c0-8 5-13 15-14-1 10-6 15-14 15" />
+    <path d="M5 19l7-7" />
+  </Svg>
+);
 export const IconX = (p: P) => (
   <Svg {...p}>
     <path d="M18 6L6 18M6 6l12 12" />

@@ -48,6 +48,7 @@ import { registerOAuth } from './oauth';
 import { PushService, webPushTransport, type PushTransport } from './push';
 import { rescheduleReminders } from './reminders';
 import { isRejection, SyncService } from './sync';
+import { karmaSummary } from './karma';
 
 
 const emailSchema = z.string().trim().min(3).max(200).regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'ungültige E-Mail-Adresse');
@@ -131,7 +132,7 @@ export async function buildApp({ config, db, pushTransport, logger = false }: Ap
     reply.header('X-Permitted-Cross-Domain-Policies', 'none');
     reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()');
     if (config.secureCookies) reply.header('Strict-Transport-Security', 'max-age=31536000');
-    if (req.url.startsWith('/api/')) reply.header('Cache-Control', 'no-store');
+    if (req.url.startsWith('/api/') && !reply.hasHeader('Cache-Control')) reply.header('Cache-Control', 'no-store');
   });
 
   app.setErrorHandler((err: unknown, req, reply) => {
@@ -337,6 +338,77 @@ export async function buildApp({ config, db, pushTransport, logger = false }: Ap
     );
     return res.length === 1;
   }
+
+  // ---------- Profilbild ----------
+
+  /** Erlaubt: JPEG, PNG, WebP bis 300 KB (der Browser verkleinert vorher auf 256 × 256). */
+  const AVATAR_TYPES: Record<string, (b: Buffer) => boolean> = {
+    'image/jpeg': (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+    'image/png': (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+    'image/webp': (b) => b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP',
+  };
+
+  /** Alle, die dieses Profilbild sehen: man selbst und alle aus gemeinsamen Projekten. */
+  async function peopleSeeing(userId: string): Promise<string[]> {
+    const rows = await db.query<{ user_id: string }>(
+      `SELECT DISTINCT pm2.user_id FROM project_members pm1 JOIN project_members pm2 ON pm2.project_id = pm1.project_id WHERE pm1.user_id = $1`,
+      [userId],
+    );
+    return [...new Set([userId, ...rows.map((r) => r.user_id)])];
+  }
+
+  app.put('/api/me/avatar', async (req) => {
+    const user = await requireUser(req);
+    const { image } = z.object({ image: z.string().max(450_000) }).parse(req.body);
+    const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(image);
+    if (!m) throw new HttpError(400, 'Bitte ein Bild als JPEG, PNG oder WebP');
+    const mime = m[1]!;
+    const bytes = Buffer.from(m[2]!, 'base64');
+    if (bytes.length > 300_000) throw new HttpError(413, 'Das Bild ist zu groß (höchstens 300 KB)');
+    if (!AVATAR_TYPES[mime]!(bytes)) throw new HttpError(400, 'Die Datei ist kein gültiges Bild');
+    const row = await db.tx(async (q) => {
+      await q.query(
+        `INSERT INTO avatars(user_id, mime, data, updated_at) VALUES ($1, $2, $3, now())
+         ON CONFLICT (user_id) DO UPDATE SET mime = EXCLUDED.mime, data = EXCLUDED.data, updated_at = now()`,
+        [user.id, mime, bytes],
+      );
+      return q.one<UserRow>('UPDATE users SET avatar_at = now() WHERE id = $1 RETURNING *', [user.id]);
+    });
+    hub.poke(await peopleSeeing(user.id));
+    return { user: toMe(row!) };
+  });
+
+  app.delete('/api/me/avatar', async (req) => {
+    const user = await requireUser(req);
+    await db.query('DELETE FROM avatars WHERE user_id = $1', [user.id]);
+    const row = await db.one<UserRow>('UPDATE users SET avatar_at = NULL WHERE id = $1 RETURNING *', [user.id]);
+    hub.poke(await peopleSeeing(user.id));
+    return { user: toMe(row!) };
+  });
+
+  app.get('/api/avatars/:id', async (req, reply) => {
+    const user = await requireUser(req);
+    const { id } = z.object({ id: uuidParam }).parse(req.params);
+    if (id !== user.id) {
+      const shared = await db.one(
+        `SELECT 1 FROM project_members a JOIN project_members b ON b.project_id = a.project_id WHERE a.user_id = $1 AND b.user_id = $2 LIMIT 1`,
+        [user.id, id],
+      );
+      if (!shared) throw new HttpError(404, 'Nicht gefunden');
+    }
+    const row = await db.one<{ mime: string; data: Buffer }>('SELECT mime, data FROM avatars WHERE user_id = $1', [id]);
+    if (!row) throw new HttpError(404, 'Nicht gefunden');
+    return reply
+      .header('Content-Type', row.mime)
+      .header('Cache-Control', 'private, max-age=31536000, immutable')
+      .header('Content-Security-Policy', "default-src 'none'; sandbox")
+      .header('Cross-Origin-Resource-Policy', 'same-origin')
+      .send(row.data);
+  });
+
+  // ---------- Karma ----------
+
+  app.get('/api/karma', async (req) => karmaSummary(db, await requireUser(req)));
 
   app.get('/api/me/sessions', async (req) => {
     const user = await requireUser(req);
@@ -703,7 +775,7 @@ export async function buildApp({ config, db, pushTransport, logger = false }: Ap
         .header('Cache-Control', 'no-cache')
         .header(
           'Content-Security-Policy',
-          "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss:; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'",
+          "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss: https://api.todoist.com; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'",
         )
         .sendFile('index.html');
     app.get('/', (req, reply) => sendIndex(reply));

@@ -166,6 +166,33 @@ const MIGRATIONS: string[] = [
     ADD COLUMN totp_last_step bigint,
     ADD COLUMN recovery_codes jsonb NOT NULL DEFAULT '[]';
   `,
+  /* 4: Profilbilder und Karma */ `
+  ALTER TABLE users ADD COLUMN avatar_at timestamptz;
+  CREATE TABLE avatars (
+    user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    mime text NOT NULL,
+    data bytea NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now()
+  );
+  CREATE TABLE karma_events (
+    id bigserial PRIMARY KEY,
+    user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    task_id uuid,
+    kind text NOT NULL,
+    points integer NOT NULL,
+    day date NOT NULL,
+    title text,
+    created_at timestamptz NOT NULL DEFAULT now()
+  );
+  CREATE INDEX karma_events_user ON karma_events(user_id, day);
+  CREATE INDEX karma_events_task ON karma_events(task_id) WHERE task_id IS NOT NULL;
+  CREATE UNIQUE INDEX karma_events_goal ON karma_events(user_id, kind, day) WHERE kind IN ('daily_goal', 'weekly_goal');
+  -- bisher Erledigtes zählt mit (Grundpunkte)
+  INSERT INTO karma_events(user_id, task_id, kind, points, day, created_at)
+  SELECT a.user_id, a.object_id, 'done', 2, (a.created_at AT TIME ZONE u.timezone)::date, a.created_at
+  FROM activity a JOIN users u ON u.id = a.user_id
+  WHERE a.kind = 'completed';
+  `,
 ];
 
 export async function migrate(db: Db): Promise<number> {

@@ -107,6 +107,8 @@ Am besten das Konto direkt nach dem ersten Start anlegen. Danach ist der Code ve
 
 **Claude verbinden** (Zusammenfassungen, Aufgaben per Chat): siehe [claude.md](claude.md).
 
+**Von Todoist umziehen:** In Todoist (Web) unter *Einstellungen → Integrationen → Entwickler* den **API-Token** kopieren. In Do-it unter *Einstellungen → Aus Todoist übernehmen* einfügen, *Aus Todoist laden*, Vorschau prüfen, *Jetzt übernehmen*. Das klappt in jedem Todoist-Tarif und holt alle offenen Aufgaben samt Projekten, Unterprojekten, Abschnitten, Unteraufgaben, Labels, Kommentaren und Erinnerungen. Der Schlüssel geht nur vom Browser direkt an Todoist und wird nicht gespeichert. Wer mag, erzeugt ihn danach in Todoist neu. Alternativ geht ein Backup-ZIP (nur Todoist Pro) oder eine einzeln exportierte CSV-Datei. Erledigte Aufgaben gibt Todoist nicht heraus.
+
 **Weitere Personen einladen:** Einstellungen → *Neue Person einladen* → Link teilen (gilt 7 Tage, einmalig). Projekte teilt man danach im Projekt über *Projekt-Einstellungen* → *Jemanden einladen*.
 
 ## 6. Sicherungen

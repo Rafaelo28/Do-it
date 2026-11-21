@@ -15,7 +15,8 @@ import {
   type TaskData,
 } from '@do-it/shared';
 import { OBJECT_SCHEMAS } from '@do-it/shared/schemas';
-import { toMe, type UserRow } from './auth';
+import { avatarUrl, toMe, type UserRow } from './auth';
+import { recordCompletion, revokeCompletion } from './karma';
 import { lockObjects, type Db, type Queryable } from './db';
 import type { Hub } from './hub';
 import { rescheduleReminders } from './reminders';
@@ -103,8 +104,8 @@ export class SyncService {
       }
     }
 
-    const members = await this.db.query<{ project_id: string; user_id: string; role: Role; name: string }>(
-      `SELECT pm.project_id, pm.user_id, pm.role, u.name FROM project_members pm JOIN users u ON u.id = pm.user_id
+    const members = await this.db.query<{ project_id: string; user_id: string; role: Role; name: string; avatar_at: Date | null }>(
+      `SELECT pm.project_id, pm.user_id, pm.role, u.name, u.avatar_at FROM project_members pm JOIN users u ON u.id = pm.user_id
        WHERE pm.project_id = ANY($1::uuid[]) ORDER BY u.name`,
       [projectIds],
     );
@@ -115,7 +116,7 @@ export class SyncService {
       cursor: next,
       hasMore,
       projectIds,
-      members: members.map<MemberInfo>((m) => ({ projectId: m.project_id, userId: m.user_id, role: m.role, name: m.name })),
+      members: members.map<MemberInfo>((m) => ({ projectId: m.project_id, userId: m.user_id, role: m.role, name: m.name, avatar: avatarUrl(m.user_id, m.avatar_at) })),
       me: toMe(user),
       briefingAt: briefing?.at ? new Date(briefing.at).toISOString() : null,
     };
@@ -362,8 +363,24 @@ export class SyncService {
     if (existing.type === 'task') {
       const before = existing.data as unknown as TaskData;
       const after = merged as unknown as TaskData;
-      const completedNow = (!before.completedAt && after.completedAt) || (after.lastCompletedAt && after.lastCompletedAt !== before.lastCompletedAt);
-      if (completedNow) await this.activity(q, projectId, user, 'completed', existing.id, `hat „${after.title}“ erledigt`);
+      // Wiederkehrende Aufgaben: lastCompletedAt rückt vor beim Erledigen, zurück beim Rückgängigmachen
+      const recurredNow = !!after.lastCompletedAt && after.lastCompletedAt > (before.lastCompletedAt ?? '');
+      const recurUndone = !!before.lastCompletedAt && (after.lastCompletedAt ?? '') < before.lastCompletedAt;
+      const completedNow = (!before.completedAt && !!after.completedAt) || recurredNow;
+      const reopened = (!!before.completedAt && !after.completedAt) || recurUndone;
+      if (completedNow) {
+        await this.activity(q, projectId, user, 'completed', existing.id, `hat „${after.title}“ erledigt`);
+        await recordCompletion(q, user, existing.id, { ...before, title: after.title }, e.notices);
+      }
+      if (reopened) {
+        await revokeCompletion(q, existing.id);
+        // Versehentlich abgehakt (rückgängig gemacht oder gleich wieder geöffnet): aus der Erledigt-Liste nehmen
+        await q.query(
+          `DELETE FROM activity WHERE id = (SELECT id FROM activity WHERE object_id = $1 AND kind = 'completed' ORDER BY id DESC LIMIT 1)
+             AND ($2 OR created_at > now() - interval '10 minutes')`,
+          [existing.id, recurUndone],
+        );
+      }
       if (after.assigneeId && after.assigneeId !== before.assigneeId && after.assigneeId !== user.id && !after.completedAt) {
         const rotated = completedNow && after.rotation.length > 1;
         e.notices.push({

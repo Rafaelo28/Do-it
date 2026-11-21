@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'wouter';
 import { createProject } from '../lib/actions';
 import { useData } from '../lib/data';
+import { karmaState } from '../lib/karma';
 import { syncState } from '../lib/sync';
+import { Avatar } from './Avatar';
 import { useNow } from '../lib/time';
 import { IconCalendar, IconClock, IconDone, IconFlag, IconInbox, IconPlus, IconSearch, IconSettings, IconSparkle, IconTag, IconToday, IconUser } from './Icons';
 
@@ -104,6 +106,7 @@ export function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () =>
       ))}
 
       <div className="sidebar-foot">
+        {me && <ProfileRow onNavigate={onNavigate} />}
         <NavLink href="/settings" icon={<IconSettings />} label="Einstellungen" onNavigate={onNavigate} />
         <div className="sync-status" title={statusText}>
           <span className={`led ${status}`} />
@@ -111,5 +114,32 @@ export function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () =>
         </div>
       </div>
     </nav>
+  );
+}
+
+/** Unten in der Seitenleiste: Profilbild, Name und Karma-Stufe mit Fortschritt. */
+function ProfileRow({ onNavigate }: { onNavigate: () => void }) {
+  const me = syncState.select((s) => s.me)!;
+  const karma = karmaState.use();
+  const [location] = useLocation();
+  const show = me.settings.karmaEnabled && karma?.enabled;
+  return (
+    <Link href={show ? '/karma' : '/settings'} className={`profile-row ${location === '/karma' ? 'active' : ''}`} onClick={onNavigate}>
+      <Avatar name={me.name} src={me.avatar} size={32} seed={me.id} />
+      <span className="profile-text">
+        <span className="profile-name">{me.name}</span>
+        {show && karma && (
+          <>
+            <span className="profile-level">
+              Stufe {karma.level.level} · {karma.level.name}
+              {karma.streak.current > 1 && ` · ${karma.streak.current} Tage`}
+            </span>
+            <span className="profile-progress" aria-hidden="true">
+              <span style={{ width: `${Math.round(karma.level.progress * 100)}%` }} />
+            </span>
+          </>
+        )}
+      </span>
+    </Link>
   );
 }

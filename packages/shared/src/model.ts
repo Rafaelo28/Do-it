@@ -67,6 +67,16 @@ export interface UserSettings {
   briefingTime: string;
   /** automatische Erinnerung x Minuten vorher für Aufgaben mit Uhrzeit; null = aus */
   autoReminderMin: number | null;
+  /** Karma anzeigen */
+  karmaEnabled: boolean;
+  /** erledigte Aufgaben pro Tag für das Tagesziel */
+  dailyGoal: number;
+  /** erledigte Aufgaben pro Woche für das Wochenziel */
+  weeklyGoal: number;
+  /** freie Wochentage (1 = Montag … 7 = Sonntag) */
+  daysOff: number[];
+  /** Urlaub (unterbricht keine Serie); to = null: läuft noch */
+  vacations: { from: string; to: string | null }[];
 }
 
 export const DEFAULT_SETTINGS: UserSettings = {
@@ -79,6 +89,11 @@ export const DEFAULT_SETTINGS: UserSettings = {
   briefingEnabled: true,
   briefingTime: '07:30',
   autoReminderMin: 0,
+  karmaEnabled: true,
+  dailyGoal: 5,
+  weeklyGoal: 25,
+  daysOff: [],
+  vacations: [],
 };
 
 
@@ -93,6 +108,8 @@ export interface Me {
   settings: UserSettings;
   /** Zwei-Faktor-Anmeldung aktiv */
   twoFactor: boolean;
+  /** Adresse des Profilbilds (mit Version), null = keins */
+  avatar: string | null;
 }
 
 export interface MemberInfo {
@@ -100,4 +117,5 @@ export interface MemberInfo {
   userId: string;
   role: Role;
   name: string;
+  avatar: string | null;
 }

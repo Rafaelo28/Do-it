@@ -15,7 +15,10 @@ Selbst gehostete Todo-App für eine kleine Gruppe – Aufgaben in normaler Sprac
 - **Erledigt-Übersicht**: alles, was in den letzten 7, 30 oder 90 Tagen erledigt wurde, nach Tagen sortiert, auch jede Runde wiederkehrender Aufgaben und was die anderen geschafft haben.
 - **Abgesichert**: Einrichtungscode fürs erste Konto, Zwei-Faktor-Anmeldung mit Authenticator-App, Geräteliste, strikte Browser-Sicherheitsregeln, Anfrage-Limits, gehärtete Container ([Absicherung](docs/betrieb.md#9-absicherung)).
 - **Claude-Anbindung** wie bei Todoist: MCP-Connector mit Anmeldung per Freigabe. Claude liest und pflegt Aufgaben und schreibt dir tägliche Briefings, die als Benachrichtigung ankommen ([docs/claude.md](docs/claude.md)).
-- **Kalender-Abo** (iCal), Todoist-Import, Mehrzeilen-Eingabe, „Teilen → Do-it“ auf Android, Tastenkürzel am Desktop.
+- **Karma**: Punkte fürs Erledigen (mehr für wichtige und pünktliche Aufgaben), Tages- und Wochenziele, Serien und zehn Stufen vom Samenkorn bis zum Urwald. Freie Tage und Urlaub unterbrechen keine Serie.
+- **Profilbilder**: eigenes Bild hochladen und zuschneiden. Es erscheint bei Zuweisungen, Kommentaren und in der Erledigt-Übersicht.
+- **Umzug von Todoist**: per API-Schlüssel (jeder Todoist-Tarif) mit Projekten, Unterprojekten, Abschnitten, Unteraufgaben, Labels, Kommentaren und Erinnerungen, oder aus einem Backup (ZIP) bzw. CSV-Export. Ein zweiter Durchlauf legt nichts doppelt an.
+- **Kalender-Abo** (iCal), Mehrzeilen-Eingabe, „Teilen → Do-it“ auf Android, Tastenkürzel am Desktop.
 
 ## Aufbau
 

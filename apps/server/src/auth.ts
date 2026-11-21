@@ -70,6 +70,7 @@ export interface UserRow {
   totp_enabled: boolean;
   totp_last_step: number | null;
   recovery_codes: string[];
+  avatar_at: Date | null;
 }
 
 export function settingsOf(u: Pick<UserRow, 'settings'>): UserSettings {
@@ -77,7 +78,21 @@ export function settingsOf(u: Pick<UserRow, 'settings'>): UserSettings {
 }
 
 export function toMe(u: UserRow): Me {
-  return { id: u.id, name: u.name, email: u.email, timezone: u.timezone, isAdmin: u.is_admin, settings: settingsOf(u), twoFactor: !!u.totp_enabled };
+  return {
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    timezone: u.timezone,
+    isAdmin: u.is_admin,
+    settings: settingsOf(u),
+    twoFactor: !!u.totp_enabled,
+    avatar: avatarUrl(u.id, u.avatar_at),
+  };
+}
+
+/** Adresse des Profilbilds; die Version im Link sorgt dafür, dass Browser ein neues Bild sofort laden. */
+export function avatarUrl(userId: string, at: Date | string | null): string | null {
+  return at ? `/api/avatars/${userId}?v=${new Date(at).getTime()}` : null;
 }
 
 export async function createSession(q: Queryable, userId: string, userAgent: string | undefined): Promise<string> {

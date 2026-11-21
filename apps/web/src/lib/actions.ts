@@ -11,6 +11,7 @@ import {
 import { db, type Task } from './db';
 import { toast } from './store';
 import { sync } from './sync';
+import { pointsFor } from './karma';
 import { nowLocal } from './time';
 
 const COLORS = ['#0f8b6c', '#3e63dd', '#e5484d', '#f76b15', '#8e4ec6', '#12a594', '#d6409f', '#978365'];
@@ -151,7 +152,9 @@ export async function toggleTask(task: Task, me: Me): Promise<void> {
   const changes = completeTaskChanges(task, today, me.id, new Date().toISOString());
   const undo = Object.fromEntries(Object.keys(changes).map((k) => [k, task[k as keyof Task] ?? null])) as Partial<TaskData>;
   await updateTask(task.id, changes);
-  const text = changes.dueDate ? `Erledigt – nächstes Mal ${formatDateRelative(changes.dueDate, today)}` : `„${task.title}“ erledigt`;
+  const points = pointsFor(task, today);
+  const base = changes.dueDate ? `Erledigt – nächstes Mal ${formatDateRelative(changes.dueDate, today)}` : `„${task.title}“ erledigt`;
+  const text = points ? `${base} · +${points} Karma` : base;
   toast(text, { action: { label: 'Rückgängig', run: () => void updateTask(task.id, undo) } });
 }
 

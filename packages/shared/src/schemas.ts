@@ -103,6 +103,11 @@ export const settingsSchema = z.strictObject({
   briefingEnabled: z.boolean(),
   briefingTime: timeSchema,
   autoReminderMin: z.number().int().min(0).max(10080).nullable(),
+  karmaEnabled: z.boolean(),
+  dailyGoal: z.number().int().min(1).max(100),
+  weeklyGoal: z.number().int().min(1).max(700),
+  daysOff: z.array(weekday).max(6),
+  vacations: z.array(z.strictObject({ from: dateSchema, to: dateSchema.nullable() })).max(24),
 });
 
 export const mutationSchema = z.strictObject({

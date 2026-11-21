@@ -1,6 +1,7 @@
 import { addDays, diffDays, formatDateLong, formatDateRelative } from '@do-it/shared';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'wouter';
+import { Avatar } from '../components/Avatar';
 import { IconCheck, IconCheckCircle, IconHash, IconRepeat } from '../components/Icons';
 import { updateTask } from '../lib/actions';
 import { api } from '../lib/api';
@@ -27,6 +28,8 @@ const RANGES = [7, 30, 90] as const;
 export function DoneView() {
   const { tasks, projectMap } = useData();
   const me = syncState.select((s) => s.me);
+  const members = syncState.select((s) => s.members);
+  const avatars = useMemo(() => new Map(members.map((m) => [m.userId, m.avatar])), [members]);
   const lastSync = syncState.select((s) => s.lastSync);
   const now = useNow();
   const [days, setDays] = useState<(typeof RANGES)[number]>(30);
@@ -151,7 +154,11 @@ export function DoneView() {
                             {project.name}
                           </span>
                         )}
-                        {i.byName && i.byId !== me?.id && <span>von {i.byName}</span>}
+                        {i.byName && i.byId !== me?.id && (
+                          <span>
+                            <Avatar name={i.byName} src={avatars.get(i.byId ?? '') ?? null} size={16} seed={i.byId ?? undefined} /> von {i.byName}
+                          </span>
+                        )}
                         {!i.stillDone && !i.recurring && !i.deleted && <span>wieder offen</span>}
                         {i.deleted && <span>gelöscht</span>}
                       </div>
