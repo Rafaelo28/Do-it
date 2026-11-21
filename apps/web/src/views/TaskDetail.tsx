@@ -73,10 +73,11 @@ function Detail({ task }: { task: Task }) {
 
   async function addLabel() {
     const name = labelText.trim().replace(/^@/, '');
-    if (!name || task.labels.includes(name)) return setLabelText('');
-    await ensureLabels([name]);
-    set({ labels: [...task.labels, name] });
+    // sofort leeren: ein gleich folgender Fokuswechsel (onBlur) legt sonst dasselbe Label noch einmal an
     setLabelText('');
+    if (!name || task.labels.some((l) => l.toLowerCase() === name.toLowerCase())) return;
+    set({ labels: [...task.labels, name] });
+    await ensureLabels([name]);
   }
 
   async function addRem() {

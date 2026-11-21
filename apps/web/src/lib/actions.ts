@@ -44,14 +44,21 @@ export async function createSection(projectId: string, name: string): Promise<st
   return id;
 }
 
-export async function ensureLabels(names: string[]): Promise<void> {
-  if (!names.length) return;
-  const existing = await db.labels.toArray();
-  for (const name of names) {
-    if (!existing.some((l) => l.name.toLowerCase() === name.toLowerCase())) {
+let labelQueue: Promise<void> = Promise.resolve();
+
+/** Fehlende Labels anlegen. Nacheinander, damit schnelle Doppel-Aufrufe (Enter + Fokuswechsel) kein Label doppelt anlegen. */
+export function ensureLabels(names: string[]): Promise<void> {
+  if (!names.length) return Promise.resolve();
+  const run = labelQueue.then(async () => {
+    const known = new Set((await db.labels.toArray()).map((l) => l.name.toLowerCase()));
+    for (const name of names) {
+      if (known.has(name.toLowerCase())) continue;
+      known.add(name.toLowerCase());
       await sync.mutate('label', uuidv7(), 'put', { name, color: null });
     }
-  }
+  });
+  labelQueue = run.catch(() => {});
+  return run;
 }
 
 async function nextTaskKey(projectId: string, parentId: string | null): Promise<string> {

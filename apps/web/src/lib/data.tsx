@@ -57,7 +57,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       projects: sortedProjects,
       sections: [...sections].sort(byKey),
       tasks: [...tasks].sort(byKey),
-      labels: [...labels].sort((a, b) => a.name.localeCompare(b.name, 'de')),
+      // doppelte Labels (gleicher Name) nur einmal zeigen
+      labels: [...new Map([...labels].sort((a, b) => (a.id < b.id ? -1 : 1)).map((l) => [l.name.toLowerCase(), l])).values()].sort((a, b) =>
+        a.name.localeCompare(b.name, 'de'),
+      ),
       reminders,
       inbox: sortedProjects.find((p) => p.isInbox),
       projectMap: new Map(sortedProjects.map((p) => [p.id, p])),
