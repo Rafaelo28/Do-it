@@ -130,6 +130,14 @@ export const settingsSchema = z.strictObject({
       }),
     )
     .max(150),
+  appearance: z.strictObject({
+    mode: z.enum(['system', 'light', 'dark']),
+    accent: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+    style: z.enum(['paper', 'clear', 'cool', 'warm', 'oled']),
+    density: z.enum(['comfortable', 'compact']),
+    radius: z.enum(['round', 'soft', 'square']),
+    textSize: z.enum(['normal', 'large']),
+  }),
 });
 
 export const mutationSchema = z.strictObject({

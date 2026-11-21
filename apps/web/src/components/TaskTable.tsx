@@ -6,8 +6,9 @@ import type { Task } from '../lib/db';
 import { syncState } from '../lib/sync';
 import { useNow } from '../lib/time';
 import { Avatar } from './Avatar';
-import { IconCheck, IconRepeat } from './Icons';
+import { IconCheck, IconFlag, IconRepeat } from './Icons';
 import { PRIORITY_COLOR } from './ui';
+import { Select } from './Select';
 
 type Col = 'title' | 'project' | 'due' | 'deadline' | 'duration' | 'priority' | 'labels' | 'assignee';
 
@@ -118,30 +119,29 @@ export function TaskTable({ tasks, showProject = true }: { tasks: Task[]; showPr
                   />
                 </td>
                 <td>
-                  <select className="cell-input" aria-label={`Dauer: ${t.title}`} value={t.durationMin ?? ''} onChange={(e) => void updateTask(t.id, { durationMin: e.target.value ? Number(e.target.value) : null })}>
-                    <option value="">–</option>
-                    {[...new Set([...DURATIONS, ...(t.durationMin ? [t.durationMin] : [])])]
-                      .sort((a, b) => a - b)
-                      .map((d) => (
-                        <option key={d} value={d}>
-                          {d < 60 ? `${d} Min.` : `${(d / 60).toLocaleString('de-DE')} Std.`}
-                        </option>
-                      ))}
-                  </select>
+                  <Select
+                    label={`Dauer: ${t.title}`}
+                    size="sm"
+                    variant="ghost"
+                    value={t.durationMin ?? 0}
+                    options={[
+                      { value: 0, label: '–' },
+                      ...[...new Set([...DURATIONS, ...(t.durationMin ? [t.durationMin] : [])])]
+                        .sort((a, b) => a - b)
+                        .map((d) => ({ value: d, label: d < 60 ? `${d} Min.` : `${(d / 60).toLocaleString('de-DE')} Std.` })),
+                    ]}
+                    onChange={(v) => void updateTask(t.id, { durationMin: v || null })}
+                  />
                 </td>
                 <td>
-                  <select
-                    className="cell-input"
-                    aria-label={`Priorität: ${t.title}`}
+                  <Select
+                    label={`Priorität: ${t.title}`}
+                    size="sm"
+                    variant="ghost"
                     value={t.priority}
-                    style={{ color: t.priority < 4 ? PRIORITY_COLOR[t.priority] : undefined }}
-                    onChange={(e) => void updateTask(t.id, { priority: Number(e.target.value) })}
-                  >
-                    <option value={1}>P1</option>
-                    <option value={2}>P2</option>
-                    <option value={3}>P3</option>
-                    <option value={4}>–</option>
-                  </select>
+                    options={[1, 2, 3, 4].map((p) => ({ value: p, label: p === 4 ? '–' : `P${p}`, icon: <IconFlag size={13} style={{ color: PRIORITY_COLOR[p] }} /> }))}
+                    onChange={(v) => void updateTask(t.id, { priority: v })}
+                  />
                 </td>
                 <td className="muted small">{t.labels.map((l) => `@${l}`).join(' ')}</td>
                 <td>{who ? <Avatar name={who.name} src={who.avatar} size={20} seed={who.userId} title={who.name} /> : ''}</td>

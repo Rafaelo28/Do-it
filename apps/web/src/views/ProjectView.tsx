@@ -17,6 +17,7 @@ import { addDays, formatDateRelative } from '@do-it/shared';
 import { AgendaList, useEvents } from '../components/Agenda';
 import { LayoutSwitch } from '../components/LayoutSwitch';
 import { LayoutBody } from './Layouted';
+import { Select } from '../components/Select';
 
 const COLORS = ['#0f8b6c', '#3e63dd', '#e5484d', '#f76b15', '#8e4ec6', '#12a594', '#d6409f', '#978365', '#5b5bd6', '#30a46c'];
 
@@ -294,11 +295,17 @@ function ProjectSettings({ project, role, onClose }: { project: Project; role: s
               {m.name} <span className="small muted">{m.email}</span>
             </span>
             {owner && m.userId !== me?.id ? (
-              <select className="input" style={{ width: 'auto' }} value={m.role} onChange={(e) => void changeRole(m.userId, e.target.value)}>
-                <option value="owner">Besitzer</option>
-                <option value="editor">Bearbeiten</option>
-                <option value="viewer">Nur lesen</option>
-              </select>
+              <Select
+                label={`Rolle von ${m.name}`}
+                size="sm"
+                value={m.role}
+                options={[
+                  { value: 'owner', label: 'Besitzer' },
+                  { value: 'editor', label: 'Bearbeiten' },
+                  { value: 'viewer', label: 'Nur lesen' },
+                ]}
+                onChange={(v) => void changeRole(m.userId, v)}
+              />
             ) : (
               <span className="small muted">{m.role === 'owner' ? 'Besitzer' : m.role === 'editor' ? 'Bearbeiten' : 'Nur lesen'}</span>
             )}
@@ -314,10 +321,17 @@ function ProjectSettings({ project, role, onClose }: { project: Project; role: s
         <div className="card" style={{ marginTop: 12, display: 'grid', gap: 8 }}>
           <div className="row">
             <strong>Jemanden einladen</strong>
-            <select className="input" style={{ width: 'auto', marginLeft: 'auto' }} value={inviteRole} onChange={(e) => setInviteRole(e.target.value as 'editor' | 'viewer')}>
-              <option value="editor">darf bearbeiten</option>
-              <option value="viewer">darf nur lesen</option>
-            </select>
+            <span style={{ marginLeft: 'auto' }} />
+            <Select
+              label="Rechte"
+              size="sm"
+              value={inviteRole}
+              options={[
+                { value: 'editor', label: 'darf bearbeiten' },
+                { value: 'viewer', label: 'darf nur lesen' },
+              ]}
+              onChange={(v) => setInviteRole(v as 'editor' | 'viewer')}
+            />
             <button className="btn" onClick={() => void createInvite()}>
               Link erstellen
             </button>

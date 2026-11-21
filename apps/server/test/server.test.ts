@@ -571,6 +571,11 @@ describe('Server', () => {
     expect(ok.json.user.settings.views.calendar).toEqual({ cal: 'month' });
     expect(ok.json.user.settings.filters).toHaveLength(1);
     expect((await anna.req('PATCH', '/api/me', { settings: { views: { x: { layout: 'gantt' } } } })).status).toBe(400);
+    const look = { mode: 'dark', accent: '#8e4ec6', style: 'cool', density: 'compact', radius: 'soft', textSize: 'large' };
+    const saved = await anna.req<{ user: { settings: { appearance: unknown } } }>('PATCH', '/api/me', { settings: { appearance: look } });
+    expect(saved.json.user.settings.appearance).toEqual(look);
+    expect((await anna.req('PATCH', '/api/me', { settings: { appearance: { ...look, accent: 'lila' } } })).status).toBe(400);
+    expect((await anna.req('PATCH', '/api/me', { settings: { appearance: { ...look, style: 'neon' } } })).status).toBe(400);
     expect((await anna.req('PATCH', '/api/me', { settings: { filters: [{ id: 'kein-uuid', name: 'X', query: 'heute', color: null }] } })).status).toBe(400);
     // Kalender-Abo enthält Deadlines
     await anna.push([{ type: 'task', id: uuidv7(), data: { projectId: annaInbox, title: 'Abgabe Bericht', deadline: '2030-02-01', createdAt: 'x' } }]);

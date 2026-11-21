@@ -4,7 +4,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
 import { Avatar } from '../components/Avatar';
-import { IconBack, IconBell, IconCalendar, IconCheck, IconTrash, IconX } from '../components/Icons';
+import { IconBack, IconBell, IconCalendar, IconCheck, IconFlag, IconTrash, IconUser, IconX } from '../components/Icons';
 import { QuickAdd } from '../components/QuickAdd';
 import { TaskList } from '../components/TaskList';
 import { PRIORITY_COLOR, reminderLabel } from '../components/ui';
@@ -13,6 +13,7 @@ import { useData } from '../lib/data';
 import { db, type Task } from '../lib/db';
 import { syncState } from '../lib/sync';
 import { useNow } from '../lib/time';
+import { projectOptions, Select } from '../components/Select';
 
 export function TaskDetail({ id }: { id: string }) {
   const { tasks, loaded } = useData();
@@ -216,53 +217,60 @@ function Detail({ task }: { task: Task }) {
 
         <label className="field">
           <span>Projekt</span>
-          <select className="input" value={task.projectId} disabled={readOnly || !!task.parentId} onChange={(e) => void moveTask(task.id, e.target.value, members.filter((m) => m.projectId === e.target.value).map((m) => m.userId))}>
-            {projects
-              .filter((p) => !p.archived || p.id === task.projectId)
-              .map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.isInbox ? 'Eingang' : p.name}
-                </option>
-              ))}
-          </select>
+          <Select
+            label="Projekt"
+            block
+            value={task.projectId}
+            disabled={readOnly || !!task.parentId}
+            options={projectOptions(projects, task.projectId)}
+            onChange={(v) => void moveTask(task.id, v, members.filter((m) => m.projectId === v).map((m) => m.userId))}
+          />
         </label>
 
         <label className="field">
           <span>Abschnitt</span>
-          <select className="input" value={task.sectionId ?? ''} disabled={readOnly} onChange={(e) => set({ sectionId: e.target.value || null })}>
-            <option value="">—</option>
-            {sections
-              .filter((s) => s.projectId === task.projectId)
-              .map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-          </select>
+          <Select
+            label="Abschnitt"
+            block
+            value={task.sectionId ?? ''}
+            disabled={readOnly}
+            options={[{ value: '', label: 'Ohne Abschnitt' }, ...sections.filter((s) => s.projectId === task.projectId).map((s) => ({ value: s.id, label: s.name }))]}
+            onChange={(v) => set({ sectionId: v || null })}
+          />
         </label>
 
         {!task.isEvent && (
         <label className="field">
           <span>Priorität</span>
-          <select className="input" value={task.priority} disabled={readOnly} onChange={(e) => set({ priority: Number(e.target.value) as 1 | 2 | 3 | 4 })}>
-            <option value={1}>P1 – dringend</option>
-            <option value={2}>P2 – wichtig</option>
-            <option value={3}>P3</option>
-            <option value={4}>Keine</option>
-          </select>
+          <Select
+            label="Priorität"
+            block
+            value={task.priority}
+            disabled={readOnly}
+            options={[
+              { value: 1, label: 'P1 – dringend', icon: <IconFlag size={15} style={{ color: PRIORITY_COLOR[1] }} /> },
+              { value: 2, label: 'P2 – wichtig', icon: <IconFlag size={15} style={{ color: PRIORITY_COLOR[2] }} /> },
+              { value: 3, label: 'P3', icon: <IconFlag size={15} style={{ color: PRIORITY_COLOR[3] }} /> },
+              { value: 4, label: 'Keine', icon: <IconFlag size={15} style={{ color: PRIORITY_COLOR[4] }} /> },
+            ]}
+            onChange={(v) => set({ priority: v })}
+          />
         </label>
         )}
 
         <label className="field">
           <span>Zuständig</span>
-          <select className="input" value={task.assigneeId ?? ''} disabled={readOnly} onChange={(e) => set({ assigneeId: e.target.value || null })}>
-            <option value="">Niemand</option>
-            {projectMembers.map((m) => (
-              <option key={m.userId} value={m.userId}>
-                {m.name}
-              </option>
-            ))}
-          </select>
+          <Select
+            label="Zuständig"
+            block
+            value={task.assigneeId ?? ''}
+            disabled={readOnly}
+            options={[
+              { value: '', label: 'Niemand', icon: <IconUser size={15} /> },
+              ...projectMembers.map((m) => ({ value: m.userId, label: m.name, icon: <Avatar name={m.name} src={m.avatar} size={18} seed={m.userId} /> })),
+            ]}
+            onChange={(v) => set({ assigneeId: v || null })}
+          />
           {task.rotation.length > 1 && (
             <span className="small">
               Abwechselnd: {task.rotation.map(nameOf).join(' → ')}{' '}
@@ -337,15 +345,20 @@ function Detail({ task }: { task: Task }) {
         ))}
       </ul>
       <div className="row" style={{ marginTop: 8 }}>
-        <select className="input" style={{ width: 'auto' }} value={remKind} onChange={(e) => setRemKind(e.target.value)}>
-          <option value="0">Zur Fälligkeit</option>
-          <option value="10">10 Min. vorher</option>
-          <option value="30">30 Min. vorher</option>
-          <option value="60">1 Std. vorher</option>
-          <option value="180">3 Std. vorher</option>
-          <option value="1440">1 Tag vorher</option>
-          <option value="abs">Zu einem Zeitpunkt …</option>
-        </select>
+        <Select
+          label="Erinnerung"
+          value={remKind}
+          options={[
+            { value: '0', label: 'Zur Fälligkeit' },
+            { value: '10', label: '10 Min. vorher' },
+            { value: '30', label: '30 Min. vorher' },
+            { value: '60', label: '1 Std. vorher' },
+            { value: '180', label: '3 Std. vorher' },
+            { value: '1440', label: '1 Tag vorher' },
+            { value: 'abs', label: 'Zu einem Zeitpunkt …' },
+          ]}
+          onChange={setRemKind}
+        />
         {remKind === 'abs' && <input className="input" type="datetime-local" style={{ width: 'auto' }} value={remAt} onChange={(e) => setRemAt(e.target.value)} />}
         <button className="btn" onClick={() => void addRem()} disabled={remKind !== 'abs' && !task.dueDate}>
           Hinzufügen

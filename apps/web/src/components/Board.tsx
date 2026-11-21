@@ -10,6 +10,7 @@ import { Avatar } from './Avatar';
 import { IconCheck, IconClock, IconFlag, IconRepeat, IconSubtasks, IconTag } from './Icons';
 import { QuickAdd } from './QuickAdd';
 import { dueLabel, durationLabel, PRIORITY_COLOR } from './ui';
+import { Select } from './Select';
 
 export interface BoardColumn {
   key: string;
@@ -89,13 +90,7 @@ export function BoardLayout({ tasks, group, groups, onGroup, projectId }: { task
       {groups.length > 1 && (
         <div className="row small muted" style={{ gap: 8, margin: '4px 0 10px' }}>
           Gruppieren nach
-          <select className="input" style={{ width: 'auto', minHeight: 32, padding: '4px 8px' }} value={g} onChange={(e) => onGroup(e.target.value as BoardGroup)}>
-            {groups.map((x) => (
-              <option key={x} value={x}>
-                {GROUP_LABEL[x]}
-              </option>
-            ))}
-          </select>
+          <Select label="Gruppieren nach" size="sm" value={g} options={groups.map((x) => ({ value: x, label: GROUP_LABEL[x] }))} onChange={onGroup} />
         </div>
       )}
       <Board tasks={top} columns={columns} columnOf={columnOf} sortable={sortable} />
