@@ -56,7 +56,7 @@ export function BriefingsView() {
           <div className="big">
             <IconSparkle size={40} />
           </div>
-          Noch keine Briefings. Verbinde Claude in den <Link href="/settings">Einstellungen</Link> und lass dir jeden Morgen eine Zusammenfassung schreiben.
+          Noch keine Briefings. Verbinde Claude in den <Link href="/settings/verbindungen">Einstellungen</Link> und lass dir jeden Morgen eine Zusammenfassung schreiben.
         </div>
       )}
       <div style={{ display: 'grid', gap: 12 }}>

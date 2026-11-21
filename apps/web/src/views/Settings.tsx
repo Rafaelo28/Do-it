@@ -1,17 +1,38 @@
 import type { Me, UserSettings } from '@do-it/shared';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Link } from 'wouter';
+import { DEFAULT_APPEARANCE, type Appearance } from '@do-it/shared';
+import { ACCENTS, applyAppearance, STYLES } from '../lib/appearance';
+import { updateSettings } from '../lib/views';
+import { Segmented } from '../components/LayoutSwitch';
 import { api } from '../lib/api';
 import { useData } from '../lib/data';
 import { currentSubscription, disablePush, enablePush, isIos, isStandalone, pushSupported } from '../lib/push';
 import { toast } from '../lib/store';
 import { sync, syncState, wipeLocalData } from '../lib/sync';
 import { nowLocal, setTimeZone } from '../lib/time';
-import { IconWarn } from '../components/Icons';
+import {
+  IconBell,
+  IconCheck,
+  IconChevronLeft,
+  IconChevronRight,
+  IconClock,
+  IconDownload,
+  IconInfo,
+  IconLeaf,
+  IconLink,
+  IconPalette,
+  IconShield,
+  IconUser,
+  IconUsers,
+  IconWarn,
+} from '../components/Icons';
 import { Sessions, TwoFactor } from './Security';
 import { TodoistImport } from './TodoistImport';
 import { ProfilePhoto } from '../components/AvatarEditor';
 import { addDays, WEEKDAYS_SHORT } from '@do-it/shared';
 import { refreshKarma } from '../lib/karma';
+import { Select } from '../components/Select';
 
 function zones(current: string): string[] {
   const fn = (Intl as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf;
@@ -20,64 +41,308 @@ function zones(current: string): string[] {
   return list.includes(current) ? list : [current, ...list];
 }
 
-export function SettingsView() {
-  const { me, lastSync, pending, status } = syncState.use();
+interface Section {
+  id: string;
+  title: string;
+  desc: string;
+  icon: React.ReactNode;
+  admin?: boolean;
+}
+
+const SECTIONS: Section[] = [
+  { id: 'konto', title: 'Konto', desc: 'Profilbild, Name, Zeitzone', icon: <IconUser /> },
+  { id: 'darstellung', title: 'Erscheinungsbild', desc: 'Akzentfarbe, Hell/Dunkel, Stil', icon: <IconPalette /> },
+  { id: 'benachrichtigungen', title: 'Benachrichtigungen', desc: 'Push, Morgen-Briefing, Erinnerungen', icon: <IconBell /> },
+  { id: 'zeiten', title: 'Tageszeiten', desc: 'Was „früh“ oder „abends“ heißt', icon: <IconClock /> },
+  { id: 'karma', title: 'Karma', desc: 'Ziele, freie Tage, Urlaub', icon: <IconLeaf /> },
+  { id: 'verbindungen', title: 'Claude & Kalender', desc: 'Claude verbinden, Kalender-Abo', icon: <IconLink /> },
+  { id: 'import', title: 'Import', desc: 'Aus Todoist übernehmen', icon: <IconDownload /> },
+  { id: 'personen', title: 'Personen', desc: 'Neue Person einladen', icon: <IconUsers />, admin: true },
+  { id: 'sicherheit', title: 'Sicherheit', desc: 'Passwort, Zwei-Faktor, Geräte', icon: <IconShield /> },
+  { id: 'app', title: 'App & Hilfe', desc: 'Synchronisierung, Tastenkürzel', icon: <IconInfo /> },
+];
+
+export function SettingsView({ section }: { section?: string }) {
+  const me = syncState.select((s) => s.me);
   if (!me) return null;
+  const sections = SECTIONS.filter((s) => !s.admin || me.isAdmin);
+  const active = sections.find((s) => s.id === section) ?? sections[0]!;
   return (
-    <div className="page">
+    <div className="page settings-page">
       <div className="page-head">
         <h1>Einstellungen</h1>
       </div>
-      <Notifications me={me} />
-      <ClaudeConnect />
-      <Profile me={me} key={`p-${me.name}-${me.timezone}`} />
-      <Times me={me} key={`t-${JSON.stringify(me.settings)}`} />
-      <KarmaSettings me={me} key={`k-${JSON.stringify([me.settings.dailyGoal, me.settings.weeklyGoal])}`} />
-      <Calendar />
-      {me.isAdmin && <InviteAccount />}
-      <TodoistImport me={me} />
-      <Password />
-      <TwoFactor me={me} />
-      <Sessions />
-      <section className="card" style={{ marginTop: 16, display: 'grid', gap: 10 }}>
-        <strong>App</strong>
-        <span className="small muted">
-          Status: {status === 'offline' ? 'offline' : status === 'error' ? 'Fehler' : 'verbunden'}
-          {lastSync && ` · zuletzt synchronisiert ${new Date(lastSync).toLocaleTimeString('de-DE')}`}
-          {pending > 0 && ` · ${pending} Änderungen warten`}
-        </span>
-        <div className="row">
-          <button className="btn" onClick={() => void sync.sync()}>
-            Jetzt synchronisieren
-          </button>
-          <button className="btn" onClick={() => void sync.resync().then(() => toast('Alles neu geladen'))}>
-            Alles neu laden
-          </button>
-          <button
-            className="btn danger"
-            onClick={async () => {
-              if (pending && !confirm(`${pending} Änderungen sind noch nicht übertragen. Trotzdem abmelden?`)) return;
-              await disablePush().catch(() => {});
-              await api('POST', '/api/auth/logout').catch(() => {});
-              await wipeLocalData();
-              location.href = '/';
-            }}
-          >
-            Abmelden
-          </button>
+      <div className={`settings-layout ${section ? 'has-section' : ''}`}>
+        <nav className="settings-nav" aria-label="Bereiche der Einstellungen">
+          {sections.map((s) => (
+            <Link key={s.id} href={`/settings/${s.id}`} className={`settings-link ${s.id === active.id ? 'active' : ''}`} aria-current={s.id === active.id ? 'page' : undefined}>
+              <span className="settings-link-icon">{s.icon}</span>
+              <span className="settings-link-text">
+                <span>{s.title}</span>
+                <span className="settings-link-desc">{s.desc}</span>
+              </span>
+              <IconChevronRight size={16} className="settings-link-chevron" />
+            </Link>
+          ))}
+        </nav>
+        <div className="settings-content">
+          <Link href="/settings" className="settings-back">
+            <IconChevronLeft size={16} /> Alle Einstellungen
+          </Link>
+          <h2 className="settings-title">{active.title}</h2>
+          <SectionBody id={active.id} me={me} />
         </div>
-        <details className="small">
-          <summary>Tastenkürzel und Eingabe-Tipps</summary>
-          <p>
-            <kbd>Q</kbd> neue Aufgabe · <kbd>/</kbd> suchen · <kbd>Esc</kbd> schließen
-          </p>
-          <p className="muted">
-            Beispiele: „morgen 15 Uhr Zahnarzt #Gesundheit“, „jeden Montag 8 Uhr Müll +Ben“, „alle 3 Tage nach Erledigung Pflanzen gießen“, „Steuer bis Ende des Monats !1“,
-            „Präsentation Freitag 10 Uhr, erinnere mich 1 Stunde vorher“, „Bad putzen samstags abwechselnd Anna und Ben“.
-          </p>
-        </details>
-      </section>
+      </div>
     </div>
+  );
+}
+
+function SectionBody({ id, me }: { id: string; me: Me }) {
+  switch (id) {
+    case 'konto':
+      return (
+        <>
+          <Profile me={me} key={`p-${me.name}-${me.timezone}`} />
+          <Logout />
+        </>
+      );
+    case 'darstellung':
+      return <AppearanceSettings me={me} />;
+    case 'benachrichtigungen':
+      return <Notifications me={me} />;
+    case 'zeiten':
+      return <Times me={me} key={`t-${JSON.stringify(me.settings)}`} />;
+    case 'karma':
+      return <KarmaSettings me={me} key={`k-${JSON.stringify([me.settings.dailyGoal, me.settings.weeklyGoal])}`} />;
+    case 'verbindungen':
+      return (
+        <>
+          <ClaudeConnect />
+          <Calendar />
+        </>
+      );
+    case 'import':
+      return <TodoistImport me={me} />;
+    case 'personen':
+      return <InviteAccount />;
+    case 'sicherheit':
+      return (
+        <>
+          <Password />
+          <TwoFactor me={me} />
+          <Sessions />
+        </>
+      );
+    default:
+      return <AppInfo />;
+  }
+}
+
+function Logout() {
+  const pending = syncState.select((s) => s.pending);
+  return (
+    <section className="card" style={{ marginTop: 16, display: 'grid', gap: 10 }}>
+      <strong>Abmelden</strong>
+      <span className="small muted">Meldet dieses Gerät ab und löscht die Daten auf diesem Gerät. Auf dem Server bleibt alles erhalten.</span>
+      <div>
+        <button
+          className="btn danger"
+          onClick={async () => {
+            if (pending && !confirm(`${pending} Änderungen sind noch nicht übertragen. Trotzdem abmelden?`)) return;
+            await disablePush().catch(() => {});
+            await api('POST', '/api/auth/logout').catch(() => {});
+            await wipeLocalData();
+            location.href = '/';
+          }}
+        >
+          Abmelden
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function AppInfo() {
+  const { lastSync, pending, status } = syncState.use();
+  return (
+    <section className="card" style={{ marginTop: 16, display: 'grid', gap: 10 }}>
+      <strong>Synchronisierung</strong>
+      <span className="small muted">
+        Status: {status === 'offline' ? 'offline' : status === 'error' ? 'Fehler' : 'verbunden'}
+        {lastSync && ` · zuletzt synchronisiert ${new Date(lastSync).toLocaleTimeString('de-DE')}`}
+        {pending > 0 && ` · ${pending} Änderungen warten`}
+      </span>
+      <div className="row">
+        <button className="btn" onClick={() => void sync.sync()}>
+          Jetzt synchronisieren
+        </button>
+        <button className="btn" onClick={() => void sync.resync().then(() => toast('Alles neu geladen'))}>
+          Alles neu laden
+        </button>
+      </div>
+      <strong style={{ marginTop: 8 }}>Tastenkürzel</strong>
+      <p className="small" style={{ margin: 0 }}>
+        <kbd>Q</kbd> neue Aufgabe · <kbd>/</kbd> suchen · <kbd>Esc</kbd> schließen
+      </p>
+      <strong style={{ marginTop: 8 }}>Eingabe-Beispiele</strong>
+      <p className="small muted" style={{ margin: 0 }}>
+        „morgen 15 Uhr Zahnarzt #Gesundheit“, „jeden Montag 8 Uhr Müll +Ben“, „alle 3 Tage nach Erledigung Pflanzen gießen“, „Steuer bis Ende des Monats !1“,
+        „Präsentation Freitag 10 Uhr, erinnere mich 1 Stunde vorher“, „Bericht morgen, Deadline Freitag“, „Meeting 14–15:30 Uhr“.
+      </p>
+    </section>
+  );
+}
+
+const PREVIEW_LINES = [70, 45, 58];
+
+/** Erscheinungsbild: Hell/Dunkel, Akzentfarbe, Stil, Ecken, Dichte, Schriftgröße */
+function AppearanceSettings({ me }: { me: Me }) {
+  const a: Appearance = { ...DEFAULT_APPEARANCE, ...me.settings.appearance };
+  const timer = useRef<number | null>(null);
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+
+  const set = (p: Partial<Appearance>, delay = 0) => {
+    const next = { ...a, ...p };
+    applyAppearance(next);
+    syncState.set((s) => (s.me ? { ...s, me: { ...s.me, settings: { ...s.me.settings, appearance: next } } } : s));
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => void updateSettings({ appearance: next }), delay);
+  };
+  const customColor = !ACCENTS.some((x) => x.color === a.accent.toLowerCase());
+
+  return (
+    <>
+      <section className="card" style={{ marginTop: 16, display: 'grid', gap: 12 }}>
+        <strong>Hell oder dunkel</strong>
+        <Segmented
+          label="Hell oder dunkel"
+          value={a.mode}
+          onChange={(mode) => set({ mode })}
+          options={[
+            { value: 'system', label: 'Wie das Gerät' },
+            { value: 'light', label: 'Hell' },
+            { value: 'dark', label: 'Dunkel' },
+          ]}
+        />
+      </section>
+
+      <section className="card" style={{ marginTop: 16, display: 'grid', gap: 12 }}>
+        <strong>Akzentfarbe</strong>
+        <div className="swatch-row">
+          {ACCENTS.map((c) => (
+            <button
+              key={c.color}
+              className={`swatch ${a.accent.toLowerCase() === c.color ? 'on' : ''}`}
+              style={{ background: c.color }}
+              title={c.name}
+              aria-label={`Akzentfarbe ${c.name}`}
+              aria-pressed={a.accent.toLowerCase() === c.color}
+              onClick={() => set({ accent: c.color })}
+            >
+              {a.accent.toLowerCase() === c.color && <IconCheck size={16} />}
+            </button>
+          ))}
+          <label className={`swatch swatch-custom ${customColor ? 'on' : ''}`} title="Eigene Farbe" aria-label="Eigene Farbe wählen">
+            <input type="color" value={a.accent} onChange={(e) => set({ accent: e.target.value }, 500)} />
+          </label>
+        </div>
+        <div className="accent-preview">
+          <button className="btn primary" tabIndex={-1}>
+            Hinzufügen
+          </button>
+          <span className="chip" style={{ background: 'var(--accent-soft)', color: 'var(--accent-strong)' }}>
+            Heute
+          </span>
+          <span className="check done" style={{ '--pc': 'var(--accent)' } as React.CSSProperties}>
+            <IconCheck size={12} />
+          </span>
+          <span className="small" style={{ color: 'var(--accent-strong)', fontWeight: 600 }}>
+            Link in Akzentfarbe
+          </span>
+        </div>
+      </section>
+
+      <section className="card" style={{ marginTop: 16, display: 'grid', gap: 12 }}>
+        <strong>Stil</strong>
+        <div className="appearance-grid">
+          {STYLES.map((s) => {
+            const [bg, side, surface] = dark ? s.dark : s.light;
+            const line = dark ? 'rgba(255,255,255,.18)' : 'rgba(0,0,0,.12)';
+            return (
+              <button key={s.value} className={`style-card ${a.style === s.value ? 'on' : ''}`} aria-pressed={a.style === s.value} onClick={() => set({ style: s.value })}>
+                <span className="style-preview" style={{ background: bg }}>
+                  <span className="pv-side" style={{ background: side }}>
+                    <i style={{ background: 'var(--accent)', width: '70%' }} />
+                    <i style={{ background: line, width: '85%' }} />
+                    <i style={{ background: line, width: '60%' }} />
+                  </span>
+                  <span className="pv-main">
+                    {PREVIEW_LINES.map((w, i) => (
+                      <i key={i} style={{ background: i === 0 ? surface : line, width: `${w}%`, height: i === 0 ? 12 : 5, border: i === 0 ? `1px solid ${line}` : undefined }} />
+                    ))}
+                  </span>
+                </span>
+                <span>{s.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="card" style={{ marginTop: 16, display: 'grid', gap: 14 }}>
+        <div className="setting-row">
+          <span>
+            <strong>Ecken</strong>
+            <span className="small muted"> – wie rund Knöpfe und Karten sind</span>
+          </span>
+          <Segmented
+            label="Ecken"
+            value={a.radius}
+            onChange={(radius) => set({ radius })}
+            options={[
+              { value: 'square', label: 'Eckig' },
+              { value: 'round', label: 'Rund' },
+              { value: 'soft', label: 'Weich' },
+            ]}
+          />
+        </div>
+        <div className="setting-row">
+          <span>
+            <strong>Dichte</strong>
+            <span className="small muted"> – Abstand in Listen</span>
+          </span>
+          <Segmented
+            label="Dichte"
+            value={a.density}
+            onChange={(density) => set({ density })}
+            options={[
+              { value: 'comfortable', label: 'Bequem' },
+              { value: 'compact', label: 'Kompakt' },
+            ]}
+          />
+        </div>
+        <div className="setting-row">
+          <span>
+            <strong>Schriftgröße</strong>
+          </span>
+          <Segmented
+            label="Schriftgröße"
+            value={a.textSize}
+            onChange={(textSize) => set({ textSize })}
+            options={[
+              { value: 'normal', label: 'Normal' },
+              { value: 'large', label: 'Groß' },
+            ]}
+          />
+        </div>
+      </section>
+
+      <div style={{ marginTop: 12 }}>
+        <button className="btn ghost small" onClick={() => set(DEFAULT_APPEARANCE)}>
+          Auf Standard zurücksetzen
+        </button>
+      </div>
+    </>
   );
 }
 
@@ -161,13 +426,20 @@ function BriefingSettings({ me }: { me: Me }) {
       </label>
       <label className="field">
         <span>Automatische Erinnerung bei Uhrzeit</span>
-        <select className="input" value={s.autoReminderMin ?? 'off'} onChange={(e) => void saveMe({ settings: { autoReminderMin: e.target.value === 'off' ? null : Number(e.target.value) } })}>
-          <option value="off">Aus</option>
-          <option value="0">Zur Fälligkeit</option>
-          <option value="10">10 Min. vorher</option>
-          <option value="30">30 Min. vorher</option>
-          <option value="60">1 Std. vorher</option>
-        </select>
+        <Select
+          label="Automatische Erinnerung"
+          block
+          value={s.autoReminderMin === null ? 'off' : String(s.autoReminderMin)}
+          options={[
+            { value: 'off', label: 'Aus' },
+            { value: '0', label: 'Zur Fälligkeit' },
+            { value: '10', label: '10 Min. vorher' },
+            { value: '15', label: '15 Min. vorher' },
+            { value: '30', label: '30 Min. vorher' },
+            { value: '60', label: '1 Std. vorher' },
+          ]}
+          onChange={(v) => void saveMe({ settings: { autoReminderMin: v === 'off' ? null : Number(v) } })}
+        />
       </label>
     </div>
   );
@@ -187,11 +459,7 @@ function Profile({ me }: { me: Me }) {
         </label>
         <label className="field">
           <span>Zeitzone</span>
-          <select className="input" value={tz} onChange={(e) => setTz(e.target.value)}>
-            {zones(me.timezone).map((z) => (
-              <option key={z}>{z}</option>
-            ))}
-          </select>
+          <Select label="Zeitzone" block searchable value={tz} options={zones(me.timezone).map((z) => ({ value: z, label: z.replace(/_/g, ' ') }))} onChange={setTz} />
         </label>
       </div>
       <span className="small muted">{me.email}</span>

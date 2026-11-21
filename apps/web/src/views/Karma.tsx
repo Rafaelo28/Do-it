@@ -57,7 +57,7 @@ export function KarmaView() {
           <h1>Karma</h1>
         </div>
         <p className="muted">
-          Karma ist ausgeschaltet. In den <Link href="/settings#karma">Einstellungen</Link> kannst du es wieder einschalten – gesammelte Punkte bleiben erhalten.
+          Karma ist ausgeschaltet. In den <Link href="/settings/karma">Einstellungen</Link> kannst du es wieder einschalten – gesammelte Punkte bleiben erhalten.
         </p>
       </div>
     );
@@ -173,7 +173,7 @@ export function KarmaView() {
           </ul>
           <span className="small muted">
             Wieder geöffnete Aufgaben geben ihre Punkte zurück. Freie Tage und Urlaub unterbrechen keine Serie. Ziele und freie Tage stellst du in den{' '}
-            <Link href="/settings#karma">Einstellungen</Link> ein.
+            <Link href="/settings/karma">Einstellungen</Link> ein.
           </span>
         </section>
       </div>

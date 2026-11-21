@@ -75,6 +75,19 @@ export interface SavedFilter {
   color: string | null;
 }
 
+/** Erscheinungsbild der App (pro Person, auf allen Geräten) */
+export interface Appearance {
+  mode: 'system' | 'light' | 'dark';
+  /** Akzentfarbe als #rrggbb */
+  accent: string;
+  style: 'paper' | 'clear' | 'cool' | 'warm' | 'oled';
+  density: 'comfortable' | 'compact';
+  radius: 'round' | 'soft' | 'square';
+  textSize: 'normal' | 'large';
+}
+
+export const DEFAULT_APPEARANCE: Appearance = { mode: 'system', accent: '#0f8b6c', style: 'paper', density: 'comfortable', radius: 'round', textSize: 'normal' };
+
 export interface UserSettings {
   morningTime: string;
   noonTime: string;
@@ -100,6 +113,7 @@ export interface UserSettings {
   views: Record<string, ViewPref>;
   /** eigene Filter */
   filters: SavedFilter[];
+  appearance: Appearance;
 }
 
 export const DEFAULT_SETTINGS: UserSettings = {
@@ -119,6 +133,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   vacations: [],
   views: {},
   filters: [],
+  appearance: DEFAULT_APPEARANCE,
 };
 
 

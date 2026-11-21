@@ -17,6 +17,7 @@ import { DoneView } from './views/Done';
 import { KarmaView } from './views/Karma';
 import { CustomFilterView } from './views/CustomFilter';
 import { startKarmaUpdates } from './lib/karma';
+import { startAppearance } from './lib/appearance';
 import { FilterView, LabelView, SearchView } from './views/Lists';
 import { ProjectView } from './views/ProjectView';
 import { TaskDetail } from './views/TaskDetail';
@@ -29,6 +30,7 @@ type Phase = 'loading' | 'setup' | 'login' | 'ready';
 
 export function App() {
   const [phase, setPhase] = useState<Phase>('loading');
+  useEffect(() => startAppearance(), []);
   const [location, navigate] = useLocation();
   const search = useSearch();
 
@@ -146,10 +148,12 @@ function Shell() {
           <Route path="/today" component={TodayView} />
           <Route path="/upcoming" component={UpcomingView} />
           <Route path="/search" component={SearchView} />
-          <Route path="/settings">
-            <Suspense fallback={<div className="page muted">Lade …</div>}>
-              <SettingsView />
-            </Suspense>
+          <Route path="/settings/:section?">
+            {(p) => (
+              <Suspense fallback={<div className="page muted">Lade …</div>}>
+                <SettingsView section={p.section} />
+              </Suspense>
+            )}
           </Route>
           <Route path="/project/:id">{(p) => <ProjectView id={p.id} key={p.id} />}</Route>
           <Route path="/label/:name">{(p) => <LabelView name={decodeURIComponent(p.name)} />}</Route>

@@ -10,6 +10,7 @@ import { syncState } from '../lib/sync';
 import { nowLocal } from '../lib/time';
 import { IconBell, IconCalendar, IconClock, IconFlag, IconHash, IconRepeat, IconSparkle, IconTag, IconUser, IconWarn, IconX } from './Icons';
 import { dueLabel, durationLabel, PRIORITY_COLOR, recurrenceLabel, reminderLabel } from './ui';
+import { projectOptions, Select } from './Select';
 
 const MARK: Record<SpanType, string> = {
   date: 'var(--hl-date)',
@@ -322,21 +323,7 @@ export function QuickAdd(props: QuickAddProps) {
       )}
 
       <div className="qa-foot">
-        <select
-          className="input"
-          value={effectiveProject}
-          onChange={(e) => setManualProject(e.target.value)}
-          aria-label="Projekt"
-          style={{ width: 'auto', minHeight: 32, padding: '3px 8px' }}
-        >
-          {projects
-            .filter((p) => !p.archived)
-            .map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.isInbox ? 'Eingang' : p.name}
-              </option>
-            ))}
-        </select>
+        <Select label="Projekt" size="sm" value={effectiveProject} options={projectOptions(projects)} onChange={(v) => setManualProject(v)} />
         {!props.parentId && (
           <button
             type="button"
