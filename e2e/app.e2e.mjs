@@ -1,7 +1,7 @@
 /**
  * Ende-zu-Ende-Test im echten Browser (Chromium über Playwright).
  * Voraussetzung: Server läuft mit LEERER Datenbank und gebauter Web-App, z. B.
- *   pnpm build && DATABASE_URL=… RUN_WORKER=true node apps/server/dist/main.js
+ *   pnpm build && DATABASE_URL=… SETUP_CODE=E2E-CODE-1 RUN_WORKER=true node apps/server/dist/main.js
  * Aufruf: E2E_URL=http://localhost:8080 node e2e/app.e2e.mjs [screenshot-ordner]
  */
 import assert from 'node:assert/strict';
@@ -11,6 +11,7 @@ const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 const URL_ = process.env.E2E_URL ?? 'http://localhost:8080';
 const SHOTS = process.argv[2];
+const SETUP_CODE = process.env.E2E_SETUP_CODE ?? 'E2E-CODE-1';
 const step = (msg) => console.log(`✓ ${msg}`);
 
 const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
@@ -34,9 +35,13 @@ try {
   await anna.page.getByLabel('Name').fill('Anna');
   await anna.page.getByLabel('E-Mail').fill('anna@example.org');
   await anna.page.getByLabel('Passwort').fill('geheim1234');
+  await anna.page.getByLabel('Einrichtungscode').fill('FALSCH-00');
+  await anna.page.getByRole('button', { name: 'Konto anlegen' }).click();
+  await anna.page.getByText('Einrichtungscode falsch').waitFor();
+  await anna.page.getByLabel('Einrichtungscode').fill(SETUP_CODE);
   await anna.page.getByRole('button', { name: 'Konto anlegen' }).click();
   await anna.page.getByRole('heading', { name: 'Heute' }).waitFor();
-  step('Ersteinrichtung');
+  step('Ersteinrichtung nur mit Einrichtungscode');
 
   // Projekt per Sidebar anlegen und Aufgabe darin
   await anna.page.getByRole('button', { name: 'Projekt anlegen' }).click();
@@ -61,7 +66,7 @@ try {
   await ben.page.getByText('lädt dich ein').waitFor();
   await ben.page.getByLabel('Name').fill('Ben');
   await ben.page.getByLabel('E-Mail').fill('ben@example.org');
-  await ben.page.getByLabel('Passwort').fill('passwort123');
+  await ben.page.getByLabel('Passwort').fill('ben-geheim-42');
   await ben.page.getByRole('button', { name: 'Konto anlegen' }).click();
   await ben.page.getByRole('heading', { name: 'Heute' }).waitFor();
   await ben.page.getByRole('button', { name: 'Menü' }).click();
@@ -115,6 +120,22 @@ try {
   await anna.page.locator('li.task').first().waitFor();
   assert.equal((await anna.page.locator('li.task .task-title').first().textContent())?.trim(), 'Glühbirne wechseln');
   step('Sortieren per Ziehen bleibt nach dem Neuladen');
+
+  // ---------- Erledigt-Übersicht ----------
+  await anna.page.locator('li.task', { hasText: 'Müll rausbringen' }).getByRole('button', { name: 'Erledigt' }).click();
+  await anna.page.getByRole('link', { name: 'Erledigt' }).click();
+  await anna.page.getByRole('heading', { name: 'Erledigt' }).waitFor();
+  const doneMuell = anna.page.locator('li.done-item', { hasText: 'Müll rausbringen' });
+  await doneMuell.waitFor({ timeout: 8000 });
+  const doneBad = anna.page.locator('li.done-item', { hasText: 'Bad putzen' });
+  await doneBad.waitFor();
+  assert.match(await doneBad.textContent(), /von Ben/);
+  assert.match(await doneBad.textContent(), /wiederkehrend/);
+  await doneMuell.getByRole('button', { name: 'Wieder öffnen' }).click();
+  await doneMuell.getByText('wieder offen').waitFor();
+  await anna.page.getByRole('link', { name: /Haushalt/ }).click();
+  await anna.page.locator('li.task', { hasText: 'Müll rausbringen' }).waitFor();
+  step('Erledigt-Übersicht mit Wieder-öffnen');
 
   if (SHOTS) {
     await anna.page.screenshot({ path: `${SHOTS}/e2e-anna.png` });

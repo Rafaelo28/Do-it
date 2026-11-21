@@ -1,23 +1,8 @@
-import { z } from 'zod';
-import { idSchema, OBJECT_TYPES, type MemberInfo, type Me, type ObjectType } from './model';
-
-export const mutationSchema = z.strictObject({
-  /** eindeutige ID der Änderung (Idempotenz) */
-  mid: z.string().min(8).max(64),
-  type: z.enum(OBJECT_TYPES as [ObjectType, ...ObjectType[]]),
-  id: idSchema,
-  op: z.enum(['put', 'delete']),
-  /** geänderte Felder (bei put) */
-  data: z.record(z.string(), z.unknown()).optional(),
-  hlc: z.string().max(80),
-});
+import type { z } from 'zod';
+import type { MemberInfo, Me, ObjectType } from './model';
+import type { mutationSchema, pushRequestSchema } from './schemas';
 
 export type Mutation = z.infer<typeof mutationSchema>;
-
-export const pushRequestSchema = z.strictObject({
-  clientId: z.string().min(1).max(64),
-  mutations: z.array(mutationSchema).max(500),
-});
 
 export type PushRequest = z.infer<typeof pushRequestSchema>;
 
@@ -44,6 +29,8 @@ export interface PullResponse {
   projectIds: string[];
   members: MemberInfo[];
   me: Me;
+  /** Zeitpunkt des neuesten Briefings (damit Geräte nur bei Bedarf nachladen) */
+  briefingAt: string | null;
 }
 
 export type ServerMessage = { type: 'poke' } | { type: 'hello'; userId: string } | { type: 'ping' };

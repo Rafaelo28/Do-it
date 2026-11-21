@@ -66,7 +66,7 @@ beforeAll(async () => {
   db = createDb(u.toString());
   await migrate(db);
   const built = await buildApp({
-    config: loadConfig({ DATABASE_URL: u.toString(), APP_URL: ORIGIN } as NodeJS.ProcessEnv),
+    config: loadConfig({ DATABASE_URL: u.toString(), APP_URL: ORIGIN, SETUP_CODE: 'MCP-TEST-1' } as NodeJS.ProcessEnv),
     db,
     pushTransport: {
       async send(_sub, payload) {
@@ -79,7 +79,9 @@ beforeAll(async () => {
   await app.listen({ port: 0, host: '127.0.0.1' });
   const addr = app.server.address();
   url = `http://127.0.0.1:${typeof addr === 'object' && addr ? addr.port : 0}`;
-  await req('POST', '/api/auth/setup', { body: { name: 'Rafael', email: 'r@example.org', password: 'geheim1234', timezone: 'Europe/Berlin' } });
+  await req('POST', '/api/auth/setup', {
+    body: { name: 'Rafael', email: 'r@example.org', password: 'geheim1234', timezone: 'Europe/Berlin', setupCode: 'MCP-TEST-1' },
+  });
   await req('POST', '/api/push/subscription', { body: { endpoint: 'https://push.example/r', keys: { p256dh: 'k', auth: 'a' } } });
 });
 
@@ -189,6 +191,7 @@ describe('Claude-Anbindung (OAuth + MCP)', () => {
     const overview = textOf(await client.callTool({ name: 'get_overview', arguments: {} }));
     expect(overview).toMatch(/## Heute \(1\)\n- Zahnarzt anrufen · fällig Heute 23:30 · P1 · #Gesundheit/);
     expect(overview).toContain('Gesundheit: 1 offen');
+    expect(overview).toMatch(/## Karma\n- Stufe 1 \(Samenkorn\), 0 Punkte/);
 
     const found = textOf(await client.callTool({ name: 'find_tasks', arguments: { query: 'müll' } }));
     expect(found).toContain('Müll rausbringen');
@@ -200,6 +203,9 @@ describe('Claude-Anbindung (OAuth + MCP)', () => {
     const done = textOf(await client.callTool({ name: 'complete_tasks', arguments: { ids: [zahnarztId] } }));
     expect(done).toContain('„Zahnarzt anrufen“ erledigt');
     expect(textOf(await client.callTool({ name: 'get_completed', arguments: { days: 1 } }))).toContain('Zahnarzt anrufen');
+    // Abhaken über Claude zählt fürs Karma
+    expect(textOf(await client.callTool({ name: 'get_overview', arguments: {} }))).toMatch(/## Karma\n- Stufe 1 \(Samenkorn\), \d+ Punkte/);
+    expect((await db.one<{ n: number }>(`SELECT count(*)::int AS n FROM karma_events WHERE kind = 'done'`))!.n).toBe(1);
 
     sent.length = 0;
     const br = textOf(await client.callTool({ name: 'post_briefing', arguments: { text: '## Heute\n- **Steuer** machen' } }));

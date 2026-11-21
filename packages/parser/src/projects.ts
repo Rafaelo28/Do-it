@@ -112,3 +112,28 @@ export function findImplicitProjects(input: string, blocked: [number, number][],
     (m) => !matches.some((o) => o !== m && o.id !== m.id && o.start <= m.start && o.end >= m.end && o.end - o.start > m.end - m.start),
   );
 }
+
+/**
+ * Wortzusammensetzungen ("Gartenschere" → Garten, "Arbeitszeugnis" → Arbeit) nur als Vorschlag,
+ * weil sie oft nichts mit dem Projekt zu tun haben.
+ */
+export function findCompoundProjects(input: string, blocked: [number, number][], projects: ProjectRef[]): string[] {
+  const words: string[] = [];
+  for (const m of input.matchAll(/[\p{L}\p{N}]+/gu)) {
+    const start = m.index;
+    const end = start + m[0].length;
+    if (!blocked.some(([a, b]) => start < b && a < end)) words.push(fold(m[0]));
+  }
+  const ids: string[] = [];
+  for (const p of projects) {
+    if (p.isInbox) continue;
+    for (const name of [p.name, ...(p.aliases ?? [])]) {
+      const parts = splitWords(name);
+      if (parts.length !== 1) continue;
+      const w = parts[0]!;
+      const stems = [...new Set([w, w.replace(/en$/, ''), w.replace(/e$/, '')])].filter((s) => s.length >= 5);
+      if (words.some((t) => stems.some((s) => t.startsWith(s) && t.length >= s.length + 3)) && !ids.includes(p.id)) ids.push(p.id);
+    }
+  }
+  return ids;
+}

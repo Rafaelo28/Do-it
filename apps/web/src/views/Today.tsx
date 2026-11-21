@@ -1,3 +1,4 @@
+import { IconSun } from '../components/Icons';
 import { addDays, formatDateLong, formatDateRelative } from '@do-it/shared';
 import { useState } from 'react';
 import { QuickAdd } from '../components/QuickAdd';
@@ -7,7 +8,7 @@ import { useData } from '../lib/data';
 import { BriefingCard } from './Briefings';
 import { toast } from '../lib/store';
 import { syncState } from '../lib/sync';
-import { useNow } from '../lib/time';
+import { localDateOf, useNow } from '../lib/time';
 
 export function TodayView() {
   const { tasks, loaded } = useData();
@@ -18,7 +19,10 @@ export function TodayView() {
   const open = tasks.filter((t) => !t.completedAt && t.dueDate && mine(t));
   const overdue = open.filter((t) => t.dueDate! < now.date).sort(byDue);
   const today = open.filter((t) => t.dueDate === now.date).sort(byDue);
-  const doneToday = tasks.filter((t) => (t.completedAt ?? t.lastCompletedAt ?? '').slice(0, 10) === new Date().toISOString().slice(0, 10) && mine(t));
+  const doneToday = tasks.filter((t) => {
+    const at = t.completedAt ?? t.lastCompletedAt;
+    return !!at && localDateOf(at) === now.date && mine(t);
+  });
 
   return (
     <div className="page">
@@ -57,7 +61,9 @@ export function TodayView() {
       ) : (
         loaded && (
           <div className="empty">
-            <div className="big">🌿</div>
+            <div className="big">
+              <IconSun size={40} />
+            </div>
             {overdue.length ? 'Für heute ist nichts Neues geplant.' : 'Alles erledigt. Genieß den Tag!'}
           </div>
         )

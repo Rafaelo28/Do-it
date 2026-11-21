@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { formatHlc, uuidv7, zonedParts, zonedToUtc, type Mutation, type PullResponse, type SyncObject } from '@do-it/shared';
+import { completeTaskChanges, formatHlc, uuidv7, zonedParts, zonedToUtc, type KarmaSummary, type Mutation, type PullResponse, type SyncObject, type TaskData } from '@do-it/shared';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app';
@@ -8,9 +8,11 @@ import { createDb, type Db } from '../src/db';
 import { migrate } from '../src/migrations';
 import type { PushService } from '../src/push';
 import { processBriefings, processDueReminders } from '../src/reminders';
+import { currentStep, totpAt } from '../src/totp';
 
 const BASE = process.env.TEST_DATABASE_URL ?? 'postgres://doit:doit@localhost:5432/doit';
 const ORIGIN = 'http://localhost:8080';
+const SETUP_CODE = 'TEST-CODE-1';
 
 type App = Awaited<ReturnType<typeof buildApp>>['app'];
 
@@ -69,7 +71,7 @@ beforeAll(async () => {
   url.pathname = `/${dbName}`;
   db = createDb(url.toString());
   await migrate(db);
-  const config = loadConfig({ DATABASE_URL: url.toString(), APP_URL: ORIGIN } as NodeJS.ProcessEnv);
+  const config = loadConfig({ DATABASE_URL: url.toString(), APP_URL: ORIGIN, SETUP_CODE } as NodeJS.ProcessEnv);
   const built = await buildApp({
     config,
     db,
@@ -109,16 +111,21 @@ function obj(p: PullResponse, id: string): SyncObject | undefined {
 describe('Server', () => {
   it('Ersteinrichtung legt Admin mit Eingang an', async () => {
     expect((await anna.req('GET', '/api/auth/status')).json).toEqual({ setupRequired: true, user: null });
-    const res = await anna.req<{ user: { id: string; isAdmin: boolean } }>('POST', '/api/auth/setup', {
-      name: 'Anna',
-      email: 'Anna@Example.org',
-      password: 'geheim1234',
-      timezone: 'Europe/Berlin',
+    const form = { name: 'Anna', email: 'Anna@Example.org', password: 'geheim1234', timezone: 'Europe/Berlin' };
+    // ohne oder mit falschem Einrichtungscode kann niemand das Admin-Konto anlegen
+    expect((await anna.req('POST', '/api/auth/setup', form)).status).toBe(403);
+    expect((await anna.req('POST', '/api/auth/setup', { ...form, setupCode: 'FALSCH-00' })).status).toBe(403);
+    // zu bekannte Passwörter werden abgelehnt
+    expect((await anna.req('POST', '/api/auth/setup', { ...form, password: 'passwort123', setupCode: SETUP_CODE })).status).toBe(400);
+    const res = await anna.req<{ user: { id: string; isAdmin: boolean; twoFactor: boolean } }>('POST', '/api/auth/setup', {
+      ...form,
+      setupCode: 'test code 1', // Groß-/Kleinschreibung und Trennzeichen egal
     });
     expect(res.status).toBe(200);
     expect(res.json.user.isAdmin).toBe(true);
+    expect(res.json.user.twoFactor).toBe(false);
     annaId = res.json.user.id;
-    const again = await new Client().req('POST', '/api/auth/setup', { name: 'X', email: 'x@example.org', password: 'geheim1234' });
+    const again = await new Client().req('POST', '/api/auth/setup', { name: 'X', email: 'x@example.org', password: 'geheim1234', setupCode: SETUP_CODE });
     expect(again.status).toBe(409);
 
     const pull = await anna.pull();
@@ -190,11 +197,13 @@ describe('Server', () => {
       token: invite.json.token,
       name: 'Ben',
       email: 'ben@example.org',
-      password: 'passwort123',
+      password: 'ben-geheim-42',
     });
     expect(reg.status).toBe(200);
     benId = reg.json.user.id;
-    expect((await new Client().req('POST', '/api/auth/register', { token: invite.json.token, name: 'C', email: 'c@example.org', password: 'passwort123' })).status).toBe(400);
+    const reuse = await new Client().req('POST', '/api/auth/register', { token: invite.json.token, name: 'C', email: 'c@example.org', password: 'c-geheim-42' });
+    expect(reuse.status).toBe(400);
+    expect(reuse.text).toContain('Einladung');
 
     // Ben sieht Annas Projekt nicht und darf dort nichts anlegen
     let p = await ben.pull();
@@ -347,5 +356,206 @@ describe('Server', () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(messages.map((m) => JSON.parse(m).type)).toEqual(['hello', 'poke']);
     ws.terminate();
+  });
+
+  it('Sicherheits-Header', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/auth/status' });
+    expect(res.headers['x-frame-options']).toBe('DENY');
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(String(res.headers['permissions-policy'])).toContain('camera=()');
+    expect(res.headers['cache-control']).toBe('no-store');
+    // HSTS nur über HTTPS
+    expect(res.headers['strict-transport-security']).toBeUndefined();
+  });
+
+  it('Erledigt-Übersicht listet abgeschlossene Aufgaben', async () => {
+    const res = await anna.req<{ items: { title: string; byName: string; stillDone: boolean; recurring: boolean }[] }>('GET', '/api/completed?days=7');
+    expect(res.status).toBe(200);
+    expect(res.json.items.find((i) => i.title === 'Zahnarzt anrufen')).toMatchObject({ byName: 'Anna', stillDone: true, recurring: false });
+    expect(res.json.items.find((i) => i.title === 'Bad putzen (Rotation)')).toMatchObject({ recurring: true });
+    expect((await anna.req('GET', '/api/completed?days=0')).status).toBe(400);
+    expect((await new Client().req('GET', '/api/completed')).status).toBe(401);
+  });
+
+  it('Sitzungen anzeigen und andere Geräte abmelden', async () => {
+    const phone = new Client();
+    expect((await phone.req('POST', '/api/auth/login', { email: 'ben@example.org', password: 'ben-geheim-42' })).status).toBe(200);
+    const list = await ben.req<{ sessions: { device: string; current: boolean }[] }>('GET', '/api/me/sessions');
+    expect(list.json.sessions.length).toBeGreaterThanOrEqual(2);
+    expect(list.json.sessions.filter((s) => s.current)).toHaveLength(1);
+    const out = await ben.req<{ removed: number }>('POST', '/api/me/sessions/logout-others');
+    expect(out.json.removed).toBeGreaterThanOrEqual(1);
+    expect((await phone.req('GET', '/api/me')).status).toBe(401);
+    expect((await ben.req('GET', '/api/me')).status).toBe(200);
+  });
+
+  it('Zwei-Faktor-Anmeldung: einrichten, anmelden, Wiederherstellungscode, ausschalten', async () => {
+    const other = new Client();
+    expect((await other.req('POST', '/api/auth/login', { email: 'ben@example.org', password: 'ben-geheim-42' })).status).toBe(200);
+
+    const setup = await ben.req<{ secret: string; uri: string; qr: string }>('POST', '/api/me/2fa/setup');
+    expect(setup.status).toBe(200);
+    expect(setup.json.uri).toMatch(/^otpauth:\/\/totp\/Do-it:ben%40example\.org\?secret=/);
+    expect(setup.json.qr).toContain('<svg');
+    const secret = setup.json.secret.replace(/\s/g, '');
+    const step = currentStep();
+
+    expect((await ben.req('POST', '/api/me/2fa/enable', { code: '000000' })).status).toBe(400);
+    const enable = await ben.req<{ recoveryCodes: string[] }>('POST', '/api/me/2fa/enable', { code: totpAt(secret, step) });
+    expect(enable.status).toBe(200);
+    expect(enable.json.recoveryCodes).toHaveLength(8);
+    expect((await ben.req<{ user: { twoFactor: boolean } }>('GET', '/api/me')).json.user.twoFactor).toBe(true);
+    // andere Geräte müssen sich neu anmelden
+    expect((await other.req('GET', '/api/me')).status).toBe(401);
+
+    const login = (code?: string) =>
+      new Client().req<{ twoFactorRequired?: boolean; error?: string }>('POST', '/api/auth/login', { email: 'ben@example.org', password: 'ben-geheim-42', code });
+    const noCode = await login();
+    expect(noCode.status).toBe(401);
+    expect(noCode.json.twoFactorRequired).toBe(true);
+    expect((await login('123456')).status).toBe(401);
+    // der Code der Einrichtung ist verbraucht, der nächste gilt
+    expect((await login(totpAt(secret, step))).status).toBe(401);
+    expect((await login(totpAt(secret, step + 1))).status).toBe(200);
+    expect((await login(totpAt(secret, step + 1))).status).toBe(401);
+
+    // Wiederherstellungscode genau einmal
+    const recovery = enable.json.recoveryCodes[0]!;
+    expect((await login(recovery.toUpperCase())).status).toBe(200);
+    expect((await login(recovery)).status).toBe(401);
+
+    // ausschalten braucht Passwort und Code
+    expect((await ben.req('POST', '/api/me/2fa/disable', { password: 'falsch', code: enable.json.recoveryCodes[1] })).status).toBe(400);
+    expect((await ben.req('POST', '/api/me/2fa/disable', { password: 'ben-geheim-42', code: enable.json.recoveryCodes[1] })).status).toBe(200);
+    expect((await login()).status).toBe(200);
+    expect((await ben.req<{ user: { twoFactor: boolean } }>('GET', '/api/me')).json.user.twoFactor).toBe(false);
+  });
+
+  it('über HTTPS: __Host-Cookie, HSTS und altes Cookie gilt weiter', async () => {
+    const httpsOrigin = 'https://do-it.example';
+    const secure = await buildApp({
+      config: loadConfig({ DATABASE_URL: 'postgres://unused', APP_URL: httpsOrigin } as NodeJS.ProcessEnv),
+      db,
+    });
+    try {
+      const res = await secure.app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { email: 'anna@example.org', password: 'geheim1234' },
+        headers: { origin: httpsOrigin },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['strict-transport-security']).toContain('max-age=');
+      const cookies = ([] as string[]).concat(res.headers['set-cookie'] ?? []);
+      const host = cookies.find((c) => c.startsWith('__Host-doit_session='))!;
+      expect(host).toMatch(/; Path=\//);
+      expect(host).toMatch(/; HttpOnly/);
+      expect(host).toMatch(/; Secure/);
+      expect(host).not.toMatch(/Domain=/i);
+      const token = host.split(';')[0]!.split('=')[1]!;
+      const viaHost = await secure.app.inject({ method: 'GET', url: '/api/me', headers: { cookie: `__Host-doit_session=${token}` } });
+      expect(viaHost.statusCode).toBe(200);
+      const viaLegacy = await secure.app.inject({ method: 'GET', url: '/api/me', headers: { cookie: `doit_session=${token}` } });
+      expect(viaLegacy.statusCode).toBe(200);
+    } finally {
+      await secure.app.close();
+    }
+  });
+
+  it('Karma: Punkte, Tages- und Wochenziel, Rückgängig, neue Stufe', async () => {
+    const karma = async () => (await anna.req<KarmaSummary>('GET', '/api/karma')).json;
+    const k0 = await karma();
+    expect(k0.level.name).toBeTruthy();
+    // Ziele so legen, dass sie in diesem Test genau erreicht werden
+    await anna.req('PATCH', '/api/me', { settings: { dailyGoal: k0.today.done + 3, weeklyGoal: k0.week.done + 4 } });
+    const today = zonedParts(new Date(), 'Europe/Berlin').date;
+    const yesterday = new Date(Date.now() - 86400_000).toISOString().slice(0, 10);
+    const [t1, t2, t3, t4] = [uuidv7(), uuidv7(), uuidv7(), uuidv7()];
+    await anna.push([
+      { type: 'task', id: t1, data: { projectId: annaInbox, title: 'Wichtig heute', priority: 1, dueDate: today, createdAt: 'x' } },
+      { type: 'task', id: t2, data: { projectId: annaInbox, title: 'Irgendwann', createdAt: 'x' } },
+      { type: 'task', id: t3, data: { projectId: annaInbox, parentId: t2, title: 'Teil davon', createdAt: 'x' } },
+      { type: 'task', id: t4, data: { projectId: annaInbox, title: 'Überfällig', priority: 2, dueDate: yesterday, createdAt: 'x' } },
+    ]);
+    const done = (id: string) => anna.push([{ type: 'task', id, data: { completedAt: new Date().toISOString(), completedBy: annaId } }]);
+    const reopen = (id: string) => anna.push([{ type: 'task', id, data: { completedAt: null, completedBy: null } }]);
+
+    await done(t1); // 2 + P1 3 + pünktlich 1
+    expect((await karma()).points - k0.points).toBe(6);
+    await reopen(t1);
+    expect((await karma()).points).toBe(k0.points);
+    await done(t1);
+    await done(t2); // 2
+    sent.length = 0;
+    await done(t3); // Unteraufgabe 1 + Tagesziel 5
+    let k = await karma();
+    expect(k.points - k0.points).toBe(6 + 2 + 1 + 5);
+    expect(k.today).toMatchObject({ reached: true, done: k0.today.done + 3 });
+    expect(k.recent[0]).toMatchObject({ kind: 'daily_goal', points: 5 });
+    await done(t4); // 2 + P2 2, nicht pünktlich + Wochenziel 20
+    k = await karma();
+    expect(k.points - k0.points).toBe(14 + 4 + 20);
+    expect(k.week.reached).toBe(true);
+    if (k0.points < 30 && k.points >= 30) expect(sent.some((s) => s.payload.title === 'Neue Karma-Stufe: Keimling')).toBe(true);
+    // Wieder öffnen nimmt Punkte und weggefallene Ziel-Boni zurück
+    await reopen(t3); // Wochenziel fällt weg, Tagesziel bleibt (t4 zählt noch)
+    k = await karma();
+    expect(k.points - k0.points).toBe(38 - 1 - 20);
+    expect(k.week.reached).toBe(false);
+    expect(k.today.reached).toBe(true);
+    await reopen(t4); // jetzt fällt auch das Tagesziel weg
+    k = await karma();
+    expect(k.points - k0.points).toBe(17 - 4 - 5);
+    expect(k.today.reached).toBe(false);
+    expect(k.days).toHaveLength(28);
+    expect(k.days.at(-1)!.date).toBe(today);
+
+    // Wiederkehrend: Rückgängig zählt nicht doppelt und verschwindet aus "Erledigt"
+    const r = uuidv7();
+    await anna.push([{ type: 'task', id: r, data: { projectId: annaInbox, title: 'Gießen', dueDate: today, recurrence: { freq: 'day', interval: 1 }, createdAt: 'x' } }]);
+    const before = (await karma()).points;
+    const task = obj((await anna.pull()).json, r)!.data as unknown as TaskData;
+    const changes = completeTaskChanges(task, today, annaId, new Date().toISOString());
+    await anna.push([{ type: 'task', id: r, data: changes as Record<string, unknown> }]);
+    expect((await karma()).points - before).toBe(3 + 5); // 2 + pünktlich 1, erreicht wieder das Tagesziel
+    await anna.push([{ type: 'task', id: r, data: { dueDate: today, lastCompletedAt: null, lastCompletedBy: null } }]);
+    expect((await karma()).points).toBe(before);
+    const list = await anna.req<{ items: { taskId: string }[] }>('GET', '/api/completed?days=1');
+    expect(list.json.items.some((i) => i.taskId === r)).toBe(false);
+  });
+
+  it('Profilbild: hochladen, nur für Mitglieder sichtbar, löschen', async () => {
+    const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    expect((await anna.req('PUT', '/api/me/avatar', { image: `data:image/svg+xml;base64,${png}` })).status).toBe(400);
+    expect((await anna.req('PUT', '/api/me/avatar', { image: `data:image/jpeg;base64,${png}` })).status).toBe(400);
+    const big = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(310_000)]).toString('base64');
+    expect((await anna.req('PUT', '/api/me/avatar', { image: `data:image/jpeg;base64,${big}` })).status).toBe(413);
+
+    const up = await anna.req<{ user: { avatar: string } }>('PUT', '/api/me/avatar', { image: `data:image/png;base64,${png}` });
+    expect(up.status).toBe(200);
+    expect(up.json.user.avatar).toMatch(new RegExp(`^/api/avatars/${annaId}\\?v=\\d+$`));
+    const own = await app.inject({ method: 'GET', url: up.json.user.avatar, headers: { cookie: anna.cookie } });
+    expect(own.statusCode).toBe(200);
+    expect(own.headers['content-type']).toBe('image/png');
+    expect(String(own.headers['cache-control'])).toContain('immutable');
+    expect(own.rawPayload.equals(Buffer.from(png, 'base64'))).toBe(true);
+
+    // Ben teilt (wieder) ein Projekt mit Anna und sieht das Bild, Fremde nicht
+    const shared = uuidv7();
+    await anna.push([{ type: 'project', id: shared, data: { name: 'Gemeinsam', sortKey: 'b0' } }]);
+    const inv = await anna.req<{ token: string }>('POST', '/api/invites', { projectId: shared });
+    await ben.req('POST', `/api/invites/${inv.json.token}/accept`);
+    const benView = await app.inject({ method: 'GET', url: up.json.user.avatar, headers: { cookie: ben.cookie } });
+    expect(benView.statusCode).toBe(200);
+    expect((await ben.pull()).json.members.find((m) => m.userId === annaId)?.avatar).toBe(up.json.user.avatar);
+    const acc = await anna.req<{ token: string }>('POST', '/api/invites', {});
+    const clara = new Client();
+    await clara.req('POST', '/api/auth/register', { token: acc.json.token, name: 'Clara', email: 'clara@example.org', password: 'clara-geheim-1' });
+    expect((await app.inject({ method: 'GET', url: up.json.user.avatar, headers: { cookie: clara.cookie } })).statusCode).toBe(404);
+    expect((await new Client().req('GET', up.json.user.avatar)).status).toBe(401);
+
+    const del = await anna.req<{ user: { avatar: string | null } }>('DELETE', '/api/me/avatar');
+    expect(del.json.user.avatar).toBeNull();
+    expect((await app.inject({ method: 'GET', url: up.json.user.avatar, headers: { cookie: anna.cookie } })).statusCode).toBe(404);
   });
 });

@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'wouter';
 import { createProject } from '../lib/actions';
 import { useData } from '../lib/data';
+import { karmaState } from '../lib/karma';
 import { syncState } from '../lib/sync';
+import { Avatar } from './Avatar';
 import { useNow } from '../lib/time';
-import { IconCalendar, IconClock, IconFlag, IconInbox, IconPlus, IconSearch, IconSettings, IconSparkle, IconTag, IconToday, IconUser } from './Icons';
+import { IconCalendar, IconClock, IconDone, IconFlag, IconInbox, IconPlus, IconSearch, IconSettings, IconSparkle, IconTag, IconToday, IconUser } from './Icons';
 
 function NavLink({ href, icon, label, count, alert, onNavigate }: { href: string; icon: React.ReactNode; label: string; count?: number; alert?: boolean; onNavigate: () => void }) {
   const [location] = useLocation();
@@ -59,6 +61,7 @@ export function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () =>
       {inbox && <NavLink href={`/project/${inbox.id}`} icon={<IconInbox />} label="Eingang" count={countIn(inbox.id)} onNavigate={onNavigate} />}
       <NavLink href="/today" icon={<IconToday />} label="Heute" count={todayCount} alert={overdue} onNavigate={onNavigate} />
       <NavLink href="/upcoming" icon={<IconCalendar />} label="Demnächst" onNavigate={onNavigate} />
+      <NavLink href="/done" icon={<IconDone />} label="Erledigt" onNavigate={onNavigate} />
       <NavLink href="/search" icon={<IconSearch />} label="Suchen" onNavigate={onNavigate} />
       <NavLink href="/briefings" icon={<IconSparkle />} label="Briefings" onNavigate={onNavigate} />
 
@@ -103,6 +106,7 @@ export function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () =>
       ))}
 
       <div className="sidebar-foot">
+        {me && <ProfileRow onNavigate={onNavigate} />}
         <NavLink href="/settings" icon={<IconSettings />} label="Einstellungen" onNavigate={onNavigate} />
         <div className="sync-status" title={statusText}>
           <span className={`led ${status}`} />
@@ -110,5 +114,32 @@ export function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () =>
         </div>
       </div>
     </nav>
+  );
+}
+
+/** Unten in der Seitenleiste: Profilbild, Name und Karma-Stufe mit Fortschritt. */
+function ProfileRow({ onNavigate }: { onNavigate: () => void }) {
+  const me = syncState.select((s) => s.me)!;
+  const karma = karmaState.use();
+  const [location] = useLocation();
+  const show = me.settings.karmaEnabled && karma?.enabled;
+  return (
+    <Link href={show ? '/karma' : '/settings'} className={`profile-row ${location === '/karma' ? 'active' : ''}`} onClick={onNavigate}>
+      <Avatar name={me.name} src={me.avatar} size={32} seed={me.id} />
+      <span className="profile-text">
+        <span className="profile-name">{me.name}</span>
+        {show && karma && (
+          <>
+            <span className="profile-level">
+              Stufe {karma.level.level} · {karma.level.name}
+              {karma.streak.current > 1 && ` · ${karma.streak.current} Tage`}
+            </span>
+            <span className="profile-progress" aria-hidden="true">
+              <span style={{ width: `${Math.round(karma.level.progress * 100)}%` }} />
+            </span>
+          </>
+        )}
+      </span>
+    </Link>
   );
 }

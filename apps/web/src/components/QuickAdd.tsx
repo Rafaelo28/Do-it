@@ -8,7 +8,7 @@ import { db } from '../lib/db';
 import { toast } from '../lib/store';
 import { syncState } from '../lib/sync';
 import { nowLocal } from '../lib/time';
-import { IconBell, IconCalendar, IconClock, IconFlag, IconHash, IconRepeat, IconSparkle, IconTag, IconUser, IconWarn } from './Icons';
+import { IconBell, IconCalendar, IconClock, IconFlag, IconHash, IconRepeat, IconSparkle, IconTag, IconUser, IconWarn, IconX } from './Icons';
 import { dueLabel, durationLabel, PRIORITY_COLOR, recurrenceLabel, reminderLabel } from './ui';
 
 const MARK: Record<SpanType, string> = {
@@ -67,11 +67,10 @@ export function QuickAdd(props: QuickAddProps) {
   }, [projects, members, labels, me, ignore, text === '']);
 
   const result = useMemo(() => parseTask(text, ctx), [text, ctx]);
-  const model = useMemo(() => train(tasks, projects), [tasks, projects]);
-  const learned = useMemo(
-    () => (!result.projectId && !result.newProjectName && !manualProject && result.title.length > 2 ? suggest(model, result.title) : null),
-    [model, result, manualProject],
-  );
+  // Das Lernmodell nur berechnen, wenn gerade wirklich ein Vorschlag gebraucht wird.
+  const wantSuggestion = !props.parentId && !result.projectId && !result.newProjectName && !manualProject && result.title.length > 2;
+  const model = useMemo(() => (wantSuggestion ? train(tasks, projects) : null), [wantSuggestion, tasks, projects]);
+  const learned = useMemo(() => (model ? suggest(model, result.title) : null), [model, result.title]);
 
   const baseProject = props.projectId ?? inbox?.id ?? '';
   const effectiveProject = manualProject ?? result.projectId ?? baseProject;
@@ -92,7 +91,12 @@ export function QuickAdd(props: QuickAddProps) {
   async function submit() {
     if (!me || !result.title.trim()) return;
     // Sofort leeren, damit man direkt weitertippen kann; gespeichert wird im Hintergrund.
-    const r: ParseResult = manualProject ? { ...result, projectId: manualProject, newProjectName: null } : result;
+    // Unteraufgaben bleiben immer im Projekt der Hauptaufgabe.
+    const r: ParseResult = props.parentId
+      ? { ...result, projectId: null, newProjectName: null }
+      : manualProject
+        ? { ...result, projectId: manualProject, newProjectName: null }
+        : result;
     reset();
     inputRef.current?.focus();
     try {
@@ -155,7 +159,6 @@ export function QuickAdd(props: QuickAddProps) {
         <ul className="list-plain" style={{ margin: '10px 0' }}>
           {batch.map((r, i) => (
             <li key={i}>
-              <span>•</span>
               <span>{r.title}</span>
               {r.dueDate && <span className="chip" style={{ '--chip': MARK.date } as React.CSSProperties}>{dueLabel(r.dueDate, r.dueTime, ctx.today)}</span>}
             </li>
@@ -247,7 +250,7 @@ export function QuickAdd(props: QuickAddProps) {
           )}
           {manualProject && (
             <button className="chip" style={chip('project')} onClick={() => setManualProject(null)}>
-              <IconHash size={14} /> {projectMap.get(manualProject)?.name} ✕
+              <IconHash size={14} /> {projectMap.get(manualProject)?.name} <IconX size={12} />
             </button>
           )}
           {result.labels.map((l) => (
@@ -300,8 +303,7 @@ export function QuickAdd(props: QuickAddProps) {
             .filter((p) => !p.archived)
             .map((p) => (
               <option key={p.id} value={p.id}>
-                {p.isInbox ? '📥 ' : '# '}
-                {p.name}
+                {p.isInbox ? 'Eingang' : p.name}
               </option>
             ))}
         </select>

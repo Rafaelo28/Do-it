@@ -87,18 +87,29 @@ docker compose logs -f cloudflared      # sollte "Registered tunnel connection" 
 ```
 
 Dann **https://do-it.gerda-hilft.de** öffnen. Beim ersten Aufruf erscheint die **Ersteinrichtung**: Das erste Konto wird Admin.
+Damit niemand anderes zuvorkommt, braucht die Ersteinrichtung einen **Einrichtungscode**. Er steht im Log der App:
+
+```bash
+docker compose logs app | grep Einrichtungscode
+# oder
+docker compose exec app node dist/cli.js setup-code
+```
+
+Am besten das Konto direkt nach dem ersten Start anlegen. Danach ist der Code verbraucht, und weitere Personen kommen nur noch über Einladungslinks dazu.
 
 ## 5. Geräte einrichten
 
 | Gerät | So geht's |
 |---|---|
-| **Android** (Chrome) | Seite öffnen → Menü ⋮ → **App installieren**. In Do-it: Einstellungen → **Benachrichtigungen einschalten** → Test senden. In den Android-Einstellungen für Do-it/Chrome die Akku-Optimierung ausschalten, dann kommen Erinnerungen pünktlicher. |
+| **Android** (Chrome) | Seite öffnen → Menü (drei Punkte oben rechts) → **App installieren**. In Do-it: Einstellungen → **Benachrichtigungen einschalten** → Test senden. In den Android-Einstellungen für Do-it/Chrome die Akku-Optimierung ausschalten, dann kommen Erinnerungen pünktlicher. |
 | **iPad / iPhone** (Safari, ab iPadOS 16.4) | Seite in Safari öffnen → **Teilen** → **Zum Home-Bildschirm**. Do-it **vom Home-Bildschirm** starten → Einstellungen → Benachrichtigungen einschalten. Nur so gibt es Push auf iOS. |
 | **Desktop** (Chrome/Edge) | Seite öffnen → Symbol „App installieren“ in der Adressleiste. Benachrichtigungen kommen, solange der Browser läuft (auch im Hintergrund). |
 
 **Claude verbinden** (Zusammenfassungen, Aufgaben per Chat): siehe [claude.md](claude.md).
 
-**Weitere Personen einladen:** Einstellungen → *Neue Person einladen* → Link teilen (gilt 7 Tage, einmalig). Projekte teilt man danach im Projekt über ⚙ → *Jemanden einladen*.
+**Von Todoist umziehen:** In Todoist (Web) unter *Einstellungen → Integrationen → Entwickler* den **API-Token** kopieren. In Do-it unter *Einstellungen → Aus Todoist übernehmen* einfügen, *Aus Todoist laden*, Vorschau prüfen, *Jetzt übernehmen*. Das klappt in jedem Todoist-Tarif und holt alle offenen Aufgaben samt Projekten, Unterprojekten, Abschnitten, Unteraufgaben, Labels, Kommentaren und Erinnerungen. Der Schlüssel geht nur vom Browser direkt an Todoist und wird nicht gespeichert. Wer mag, erzeugt ihn danach in Todoist neu. Alternativ geht ein Backup-ZIP (nur Todoist Pro) oder eine einzeln exportierte CSV-Datei. Erledigte Aufgaben gibt Todoist nicht heraus.
+
+**Weitere Personen einladen:** Einstellungen → *Neue Person einladen* → Link teilen (gilt 7 Tage, einmalig). Projekte teilt man danach im Projekt über *Projekt-Einstellungen* → *Jemanden einladen*.
 
 ## 6. Sicherungen
 
@@ -135,8 +146,46 @@ Das Skript sichert zuerst die Datenbank, holt den neuen Code, baut das Image, st
 | Push auf iPad fehlt | Do-it muss vom Home-Bildschirm gestartet sein, nicht aus Safari. |
 | Push auf Android verspätet | Akku-Optimierung für Chrome/Do-it ausschalten. |
 | Passwort vergessen | `docker compose exec app node dist/cli.js reset-password name@example.org` gibt ein neues Passwort aus. Weitere Befehle: `users`, `make-admin <email>`. |
+| Handy mit Authenticator-App verloren | Mit einem der Wiederherstellungscodes anmelden. Ohne Codes: `docker compose exec app node dist/cli.js disable-2fa name@example.org`, danach neu einrichten. |
+| Einrichtungscode gesucht | `docker compose exec app node dist/cli.js setup-code` |
+| „Zu viele Anfragen“ | Schutz gegen Skripte: höchstens 600 Anfragen pro Minute und IP (`RATE_LIMIT_PER_MIN` in der `.env`), 10 Anmeldeversuche pro Konto in 15 Minuten. Kurz warten. |
 
-## 9. Entwicklung
+## 9. Absicherung
+
+**Was Do-it selbst schon macht:**
+
+| Schutz | Wie |
+|---|---|
+| Kein offener Port | Der Tunnel baut die Verbindung von innen nach außen auf. Die App lauscht nur auf `127.0.0.1` der VM. |
+| Ersteinrichtung | nur mit dem Einrichtungscode aus dem Server-Log (siehe Schritt 4) |
+| Passwörter | scrypt-Hashes, mindestens 8 Zeichen, sehr häufige Passwörter („passwort123“, „12345678“ …) werden abgelehnt |
+| Zwei-Faktor-Anmeldung | Einstellungen → *Zwei-Faktor-Anmeldung* → mit einer Authenticator-App (Aegis, 2FAS, Google/Microsoft Authenticator). Dazu gibt es 8 Wiederherstellungscodes. |
+| Angemeldete Geräte | Einstellungen → *Angemeldete Geräte*: Liste aller Sitzungen, „Alle anderen Geräte abmelden“. Passwort ändern meldet ebenfalls alle anderen Geräte ab. |
+| Brute-Force | 10 Anmeldeversuche pro Konto und IP in 15 Minuten, 30 pro IP, 10 falsche Zwei-Faktor-Codes pro Konto. Dazu ein grobes Limit von 600 Anfragen pro Minute und IP. |
+| Cookies | `__Host-`-Präfix, `HttpOnly`, `Secure`, `SameSite=Lax`. Schreibende Anfragen nur von der eigenen Adresse (Origin-Prüfung). |
+| Browser-Schutz | Content-Security-Policy (nur eigene Skripte), HSTS, `X-Frame-Options: DENY`, `nosniff`, Permissions-Policy (kein Zugriff auf Kamera, Mikrofon, Standort) |
+| Container | Läuft als Benutzer `node`, ohne Linux-Capabilities und mit `no-new-privileges`. Logs werden auf 3 × 10 MB begrenzt. |
+| Daten | Nächtliche Datenbank-Sicherung. Alte Sitzungen, Codes und Einträge werden automatisch aufgeräumt. |
+
+**Empfohlen in Cloudflare (kostenlos):**
+
+| Wo | Einstellung |
+|---|---|
+| SSL/TLS → Edge Certificates | **Always Use HTTPS: an**, **Minimum TLS Version: 1.2** |
+| Security → WAF → Rate limiting rules | Eine Regel: *URI Path equals* `/api/auth/login`, **5 Anfragen pro 10 Sekunden** je IP, Aktion **Block** für 10 Sekunden. Das ist die eine Regel, die im kostenlosen Tarif enthalten ist. |
+| Security → Settings | **Security Level: Medium**, **Browser Integrity Check: an** |
+| Security → Bots | Bot Fight Mode nur einschalten, wenn Claude trotzdem verbinden kann. Sonst aus lassen (siehe [claude.md](claude.md)). |
+| Security → WAF → Custom rules | Optional, wenn ihr nur in Deutschland seid: *Country not in {Germany}* → **Managed Challenge**. Ausnahmen für `/mcp`, `/oauth/` und `/.well-known/`, weil Claude aus den USA zugreift. |
+
+**Für euch selbst:**
+
+- Ein eigenes, langes Passwort (Passwort-Manager) und Zwei-Faktor-Anmeldung, mindestens für das Admin-Konto.
+- Die `.env` enthält das Datenbank-Passwort und das Tunnel-Token: nicht ins Git, nicht weitergeben (`chmod 600 deploy/.env`).
+- VM aktuell halten (`unattended-upgrades` aus Schritt 1) und Do-it regelmäßig mit `./update.sh` aktualisieren.
+- SSH nur mit Schlüssel, Passwort-Login aus (`PasswordAuthentication no` in `/etc/ssh/sshd_config`).
+- Einladungslinks nur direkt an die Person schicken. Sie gelten 7 Tage und nur einmal.
+
+## 10. Entwicklung
 
 ```bash
 corepack enable

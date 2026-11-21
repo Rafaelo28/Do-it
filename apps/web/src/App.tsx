@@ -1,5 +1,5 @@
 import type { Me } from '@do-it/shared';
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Redirect, Route, Switch, useLocation, useSearch } from 'wouter';
 import { IconMenu, IconPlus } from './components/Icons';
 import { QuickAdd } from './components/QuickAdd';
@@ -13,11 +13,15 @@ import { sync, syncState, wipeLocalData } from './lib/sync';
 import { setTimeZone } from './lib/time';
 import { AuthView } from './views/Auth';
 import { BriefingsView } from './views/Briefings';
+import { DoneView } from './views/Done';
+import { KarmaView } from './views/Karma';
+import { startKarmaUpdates } from './lib/karma';
 import { FilterView, LabelView, SearchView } from './views/Lists';
 import { ProjectView } from './views/ProjectView';
-import { SettingsView } from './views/Settings';
 import { TaskDetail } from './views/TaskDetail';
 import { TodayView, UpcomingView } from './views/Today';
+
+const SettingsView = lazy(() => import('./views/Settings').then((m) => ({ default: m.SettingsView })));
 
 type Phase = 'loading' | 'setup' | 'login' | 'ready';
 
@@ -97,6 +101,8 @@ function Shell() {
   const search = useSearch();
   const projectId = /^\/project\/([\w-]+)/.exec(location)?.[1];
 
+  useEffect(() => startKarmaUpdates(), []);
+
   useEffect(() => {
     if (new URLSearchParams(search).get('add') === '1') {
       setAdding('');
@@ -138,11 +144,17 @@ function Shell() {
           <Route path="/today" component={TodayView} />
           <Route path="/upcoming" component={UpcomingView} />
           <Route path="/search" component={SearchView} />
-          <Route path="/settings" component={SettingsView} />
+          <Route path="/settings">
+            <Suspense fallback={<div className="page muted">Lade …</div>}>
+              <SettingsView />
+            </Suspense>
+          </Route>
           <Route path="/project/:id">{(p) => <ProjectView id={p.id} key={p.id} />}</Route>
           <Route path="/label/:name">{(p) => <LabelView name={decodeURIComponent(p.name)} />}</Route>
           <Route path="/task/:id">{(p) => <TaskDetail id={p.id} />}</Route>
           <Route path="/briefings" component={BriefingsView} />
+          <Route path="/done" component={DoneView} />
+          <Route path="/karma" component={KarmaView} />
           <Route path="/filter/:name">{(p) => <FilterView name={p.name} />}</Route>
           <Route path="/invite/:token">{(p) => <InviteAccept token={p.token} />}</Route>
           <Route path="/share">

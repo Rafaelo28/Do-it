@@ -11,6 +11,7 @@ import {
 import { db, type Task } from './db';
 import { toast } from './store';
 import { sync } from './sync';
+import { pointsFor } from './karma';
 import { nowLocal } from './time';
 
 const COLORS = ['#0f8b6c', '#3e63dd', '#e5484d', '#f76b15', '#8e4ec6', '#12a594', '#d6409f', '#978365'];
@@ -43,14 +44,21 @@ export async function createSection(projectId: string, name: string): Promise<st
   return id;
 }
 
-export async function ensureLabels(names: string[]): Promise<void> {
-  if (!names.length) return;
-  const existing = await db.labels.toArray();
-  for (const name of names) {
-    if (!existing.some((l) => l.name.toLowerCase() === name.toLowerCase())) {
+let labelQueue: Promise<void> = Promise.resolve();
+
+/** Fehlende Labels anlegen. Nacheinander, damit schnelle Doppel-Aufrufe (Enter + Fokuswechsel) kein Label doppelt anlegen. */
+export function ensureLabels(names: string[]): Promise<void> {
+  if (!names.length) return Promise.resolve();
+  const run = labelQueue.then(async () => {
+    const known = new Set((await db.labels.toArray()).map((l) => l.name.toLowerCase()));
+    for (const name of names) {
+      if (known.has(name.toLowerCase())) continue;
+      known.add(name.toLowerCase());
       await sync.mutate('label', uuidv7(), 'put', { name, color: null });
     }
-  }
+  });
+  labelQueue = run.catch(() => {});
+  return run;
 }
 
 async function nextTaskKey(projectId: string, parentId: string | null): Promise<string> {
@@ -79,7 +87,8 @@ export async function createTaskFromParse(r: ParseResult, opts: CreateOptions): 
   if (r.newProjectName) projectId = await createProject(r.newProjectName);
   const parentId = opts.parentId ?? null;
   const sectionId = projectId === opts.projectId ? (opts.sectionId ?? null) : null;
-  await ensureLabels(r.labels);
+  const labels = [...new Set([...(opts.defaults?.labels ?? []), ...r.labels])];
+  await ensureLabels(labels);
   const id = uuidv7();
   const data: Partial<TaskData> = {
     ...opts.defaults,
@@ -95,7 +104,7 @@ export async function createTaskFromParse(r: ParseResult, opts: CreateOptions): 
     recurrence: r.recurrence,
     assigneeId: r.assigneeId,
     rotation: r.rotation,
-    labels: r.labels,
+    labels,
     sortKey: await nextTaskKey(projectId, parentId),
     createdBy: opts.me.id,
     createdAt: new Date().toISOString(),
@@ -150,7 +159,9 @@ export async function toggleTask(task: Task, me: Me): Promise<void> {
   const changes = completeTaskChanges(task, today, me.id, new Date().toISOString());
   const undo = Object.fromEntries(Object.keys(changes).map((k) => [k, task[k as keyof Task] ?? null])) as Partial<TaskData>;
   await updateTask(task.id, changes);
-  const text = changes.dueDate ? `Erledigt – nächstes Mal ${formatDateRelative(changes.dueDate, today)}` : `„${task.title}“ erledigt`;
+  const points = pointsFor(task, today);
+  const base = changes.dueDate ? `Erledigt – nächstes Mal ${formatDateRelative(changes.dueDate, today)}` : `„${task.title}“ erledigt`;
+  const text = points ? `${base} · +${points} Karma` : base;
   toast(text, { action: { label: 'Rückgängig', run: () => void updateTask(task.id, undo) } });
 }
 

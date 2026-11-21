@@ -13,14 +13,14 @@ export interface Briefing {
 
 /** Briefings vom Server; lädt neu, sobald der Sync etwas Neues meldet. */
 export function useBriefings(): { list: Briefing[]; reload: () => void; markRead: (id: string) => Promise<void>; remove: (id: string) => Promise<void> } {
-  const { lastSync } = syncState.use();
+  const briefingAt = syncState.select((s) => s.briefingAt);
   const [list, setList] = useState<Briefing[]>([]);
   const reload = useCallback(() => {
     api<{ briefings: Briefing[] }>('GET', '/api/briefings')
       .then((r) => setList(r.briefings))
       .catch(() => {});
   }, []);
-  useEffect(reload, [reload, lastSync]);
+  useEffect(reload, [reload, briefingAt]);
   return {
     list,
     reload,

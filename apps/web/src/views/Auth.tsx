@@ -1,6 +1,6 @@
 import type { Me } from '@do-it/shared';
 import { useEffect, useState, type FormEvent } from 'react';
-import { api } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import { deviceTimeZone } from '../lib/time';
 
 type Mode = 'setup' | 'login' | 'register';
@@ -9,6 +9,11 @@ export function AuthView({ mode, token, onDone }: { mode: Mode; token?: string; 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [setupCode, setSetupCode] = useState('');
+  const [code, setCode] = useState('');
+  const [needCode, setNeedCode] = useState(false);
+  /** Wiederherstellungscode statt App-Code (Buchstaben, daher andere Tastatur) */
+  const [recoveryMode, setRecoveryMode] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [invite, setInvite] = useState<{ valid: boolean; invitedBy?: string; projectName?: string | null } | null>(null);
@@ -29,12 +34,18 @@ export function AuthView({ mode, token, onDone }: { mode: Mode; token?: string; 
       const timezone = deviceTimeZone();
       const r =
         mode === 'login'
-          ? await api<{ user: Me }>('POST', '/api/auth/login', { email, password })
+          ? await api<{ user: Me }>('POST', '/api/auth/login', { email, password, ...(needCode ? { code } : {}) })
           : mode === 'setup'
-            ? await api<{ user: Me }>('POST', '/api/auth/setup', { name, email, password, timezone })
+            ? await api<{ user: Me }>('POST', '/api/auth/setup', { name, email, password, timezone, setupCode })
             : await api<{ user: Me }>('POST', '/api/auth/register', { token, name, email, password, timezone });
       onDone(r.user);
     } catch (err) {
+      if (err instanceof ApiError && err.data.twoFactorRequired && !needCode) {
+        // Passwort stimmt, jetzt fehlt nur noch der Code
+        setNeedCode(true);
+        setError('');
+        return;
+      }
       setError((err as Error).message);
     } finally {
       setBusy(false);
@@ -49,6 +60,26 @@ export function AuthView({ mode, token, onDone }: { mode: Mode; token?: string; 
         <img className="logo" src="/icons/icon.svg" alt="" />
         <h1>{heading}</h1>
         {mode === 'setup' && <p className="muted">Lege das erste Konto an. Es wird Admin und kann später andere einladen.</p>}
+        {mode === 'setup' && (
+          <>
+            <label className="field">
+              <span>Einrichtungscode</span>
+              <input
+                className="input"
+                required
+                autoComplete="off"
+                autoCapitalize="characters"
+                spellCheck={false}
+                placeholder="ABCD-EFGH"
+                value={setupCode}
+                onChange={(e) => setSetupCode(e.target.value)}
+              />
+            </label>
+            <p className="small muted" style={{ margin: 0 }}>
+              Der Code steht im Server-Log: <code>docker compose logs app | grep Einrichtungscode</code>
+            </p>
+          </>
+        )}
         {mode === 'register' && invite && !invite.valid && <p className="error-text">Diese Einladung ist ungültig oder abgelaufen.</p>}
         {mode === 'register' && invite?.valid && (
           <p className="muted">
@@ -77,6 +108,37 @@ export function AuthView({ mode, token, onDone }: { mode: Mode; token?: string; 
             onChange={(e) => setPassword(e.target.value)}
           />
         </label>
+        {needCode && (
+          <>
+            <label className="field">
+              <span>{recoveryMode ? 'Wiederherstellungscode' : 'Code aus der Authenticator-App'}</span>
+              <input
+                key={recoveryMode ? 'recovery' : 'totp'}
+                className="input"
+                autoFocus
+                required
+                inputMode={recoveryMode ? 'text' : 'numeric'}
+                autoComplete={recoveryMode ? 'off' : 'one-time-code'}
+                autoCapitalize="off"
+                spellCheck={false}
+                placeholder={recoveryMode ? 'abcde-12345' : '123456'}
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+              />
+            </label>
+            <button
+              type="button"
+              className="btn ghost small"
+              style={{ justifySelf: 'start', paddingLeft: 0 }}
+              onClick={() => {
+                setRecoveryMode((r) => !r);
+                setCode('');
+              }}
+            >
+              {recoveryMode ? 'Code aus der App verwenden' : 'Handy nicht zur Hand? Wiederherstellungscode verwenden'}
+            </button>
+          </>
+        )}
         {error && <p className="error-text">{error}</p>}
         <button className="btn primary" disabled={busy || (mode === 'register' && invite?.valid === false)}>
           {mode === 'login' ? 'Anmelden' : 'Konto anlegen'}

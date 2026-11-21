@@ -2,6 +2,7 @@ import {
   addDays,
   addMonths,
   addYears,
+  daysInMonth,
   endOfMonth,
   firstOccurrence,
   fromParts,
@@ -38,7 +39,7 @@ import {
   WD_FULL,
   WD_PLURAL,
 } from './lexicon';
-import { findImplicitProjects, fold, type ProjectRef } from './projects';
+import { findCompoundProjects, findImplicitProjects, fold, type ProjectRef } from './projects';
 
 // ---------- Öffentliche Typen ----------
 
@@ -128,12 +129,13 @@ export interface ParseResult {
 type Tod = 'morning' | 'forenoon' | 'noon' | 'afternoon' | 'evening' | 'night' | 'workEnd';
 
 type Payload =
-  | { k: 'date'; date: PlainDate; time?: PlainTime; tod?: Tod; src?: 'weekday' | 'explicit' }
+  | { k: 'date'; date: PlainDate; time?: PlainTime; tod?: Tod; src?: 'weekday' | 'explicit' | 'day' | 'month'; day?: number; ym?: [number, number] }
   | { k: 'time'; time: PlainTime; tod?: Tod; numeric?: { h: number; m: number; shifted: boolean }; durationMin?: number }
   | { k: 'recurrence'; rec: Recurrence; time?: PlainTime; tod?: Tod }
   | { k: 'after' }
   | { k: 'duration'; min: number }
   | { k: 'relReminder'; offsetMin: number }
+  | { k: 'eveReminder' }
   | { k: 'remMarker' }
   | { k: 'deadlineMarker' }
   | { k: 'offset'; days: number }
@@ -293,19 +295,25 @@ function lowerPreserve(s: string): string {
 const Q = '(?<q>frühmorgens|früh|morgens|vormittags|mittags|nachmittags|abends|nachts|in\\s+der\\s+früh|in\\s+der\\s+nacht)';
 const UNIT = '(?<u>minuten|minute|min\\.?|m|stunden|stunde|std\\.?|h|tagen|tage|tag|wochen|woche)';
 const REM = '(?:mit\\s+)?(?:erinnere?\\s+mich|erinnerung|reminder)';
+const BEFORE = '(?:vorher|davor|zuvor|früher|vor\\s+(?:dem\\s+|der\\s+)?(?:termin|beginn|start|anfang|losgehen))';
 const SEP = '\\s*(?:,|und|&|\\+|sowie)\\s*';
 
 // ---------- Regeln: Erinnerungen ----------
 
-rule(PRIO_REMINDER, `${REM}\\s*:?\\s+(?:(?:jeweils|immer)\\s+)?(?<n>${NUM})\\s*${UNIT}\\s+(?:vorher|davor|zuvor|früher|vor\\s+beginn)`, (g) => {
+rule(PRIO_REMINDER, `${REM}\\s*:?\\s+(?:(?:jeweils|immer)\\s+)?(?<n>${NUM})\\s*${UNIT}\\s+${BEFORE}`, (g) => {
   const n = parseNumber(g.n);
   return n === null ? null : { k: 'relReminder', offsetMin: Math.round(n * unitMinutes(g.u!)) };
 });
-rule(PRIO_REMINDER, `(?<n>${NUM})\\s*${UNIT}\\s+(?:vorher|davor|zuvor)(?:\\s+(?:erinnern|erinnert\\s+werden|erinnerung|benachrichtigen))?`, (g) => {
+rule(PRIO_REMINDER, `(?<n>${NUM})\\s*${UNIT}\\s+${BEFORE}(?:\\s+(?:erinnern(?:\\s+lassen)?|erinnert\\s+werden|erinnerung|benachrichtigen|bescheid\\s+(?:sagen|geben)))?`, (g) => {
   const n = parseNumber(g.n);
   return n === null ? null : { k: 'relReminder', offsetMin: Math.round(n * unitMinutes(g.u!)) };
 });
 rule(PRIO_REMINDER, `(?:${REM}\\s+)?am\\s+vortag`, () => ({ k: 'relReminder', offsetMin: 1440 }));
+rule(PRIO_REMINDER, `(?:${REM}\\s+)?(?:am\\s+vorabend|am\\s+abend\\s+(?:vorher|davor))`, () => ({ k: 'eveReminder' }));
+rule(PRIO_REMINDER, `(?:sag|gib)\\s+mir\\s+(?<n>${NUM})\\s*${UNIT}\\s+(?:vorher|davor|zuvor)\\s+bescheid`, (g) => {
+  const n = parseNumber(g.n);
+  return n === null ? null : { k: 'relReminder', offsetMin: Math.round(n * unitMinutes(g.u!)) };
+});
 rule(PRIO_REMINDER, `${REM}\\s+(?:zur\\s+fälligkeit|pünktlich|zum\\s+termin|rechtzeitig)`, () => ({ k: 'relReminder', offsetMin: 0 }));
 rule(PRIO_MARKER + 2, `${REM}(?:\\s*:)?`, () => ({ k: 'remMarker' }));
 rule(PRIO_MARKER, `(?:deadline|frist|abgabefrist|fällig\\s+spätestens)(?:\\s*:)?(?:\\s+(?:ist|am|bis|zum))?`, () => ({ k: 'deadlineMarker' }));
@@ -607,7 +615,13 @@ rule(PRIO_DATE, '(?:(?<mod>nächste[ns]?|kommende[ns]?|übernächste[ns]?|diese[
 rule(PRIO_DATE, '(?<d>\\d{1,2})\\.(?<m>\\d{1,2})\\.(?:(?<y>\\d{4}|\\d{2})(?!\\d))?|(?<d2>\\d{1,2})\\.(?<m2>\\d{1,2})(?![.\\d])', (g, c, m) => {
   const before = c.lower.slice(Math.max(0, m.index - 4), m.index);
   const after = c.lower.slice(m.index + m[0].length, m.index + m[0].length + 5);
-  if (/(?:um|ab|bis)\s$/.test(before) && !g.y && g.d2) return null;
+  if (/(?:um|gegen)\s$/.test(before) && !g.y && g.d2) return null;
+  if (g.d2) {
+    // "2.5" ohne Schlusspunkt ist meist eine Zahl; als Datum nur mit Präposition/Wochentag oder zweistellig ("24.12")
+    const wide = c.lower.slice(Math.max(0, m.index - 16), m.index);
+    const prep = /(?:^|\s)(?:am|zum|vom|den|bis(?:\s+zum)?|ab(?:\s+dem)?|spätestens|spaetestens|frist|deadline|montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|mo|di|mi|do|fr|sa|so)\.?,?\s*$/u.test(wide);
+    if (!prep && !(g.d2.length === 2 && g.m2!.length === 2)) return null;
+  }
   if (/^\s*uhr/.test(after)) return null;
   const d = Number(g.d ?? g.d2);
   const mo = Number(g.m ?? g.m2);
@@ -615,6 +629,24 @@ rule(PRIO_DATE, '(?<d>\\d{1,2})\\.(?<m>\\d{1,2})\\.(?:(?<y>\\d{4}|\\d{2})(?!\\d)
   const date = futureDate(c, d, mo, yearOf(g.y));
   return date ? { k: 'date', date, src: 'explicit' } : null;
 });
+rule(
+  PRIO_DATE,
+  `(?:am|zum|bis\\s+zum|bis|ab\\s+dem|ab)\\s+(?<d>\\d{1,2})\\.(?!\\s*(?:\\d|${MONTH_ANY}))(?:\\s+(?:des|dieses|diesen)\\s+monats)?`,
+  (g, c) => {
+    const d = Number(g.d);
+    if (d < 1 || d > 31) return null;
+    const [y, m] = toParts(c.today);
+    for (let k = 0; k < 14; k++) {
+      const total = y * 12 + (m - 1) + k;
+      const yy = Math.floor(total / 12);
+      const mm = (total % 12) + 1;
+      if (d > daysInMonth(yy, mm)) continue;
+      const date = fromParts(yy, mm, d);
+      if (date >= c.today) return { k: 'date', date, src: 'day', day: d };
+    }
+    return null;
+  },
+);
 rule(PRIO_DATE, '(?<y>\\d{4})-(?<m>\\d{2})-(?<d>\\d{2})', (g) => {
   const y = Number(g.y);
   const mo = Number(g.m);
@@ -636,7 +668,8 @@ rule(PRIO_DATE, `(?<part>anfang|mitte|ende)\\s+(?<mon>${MONTH_FULL})(?:\\s+(?<y>
   let date = monthPart(y ?? ty, mo, g.part);
   if (!y && endOfMonth(date) < c.today) date = monthPart(ty + 1, mo, g.part);
   if (date < c.today) date = c.today;
-  return { k: 'date', date };
+  const [dy, dm] = toParts(date);
+  return { k: 'date', date, ...(g.part ? {} : { src: 'month' as const, ym: [dy, dm] as [number, number] }) };
 });
 rule(
   PRIO_DATE,
@@ -660,7 +693,7 @@ rule(
     const [y, m] = toParts(c.today);
     const n = fold(g.nm!).startsWith('uebernaechst') ? 2 : 1;
     const [ny, nm] = toParts(addMonths(fromParts(y, m, 1), n));
-    return { k: 'date', date: monthPart(ny, nm, g.part) };
+    return { k: 'date', date: monthPart(ny, nm, g.part), ...(g.part ? {} : { src: 'month' as const, ym: [ny, nm] as [number, number] }) };
   },
 );
 rule(PRIO_DATE, '(?<part>anfang|mitte|ende)\\s+(?:des|dieses|diesen)\\s+jahres|jahres(?<p2>ende|anfang|mitte)', (g, c) => {
@@ -742,6 +775,7 @@ rule(
 rule(PRIO_TIME + 1, `(?:um\\s+|gegen\\s+|ab\\s+)?(?<h>\\d{1,2})(?:[:.](?<m>\\d{2}))?\\s*uhr(?:\\s+${Q})?`, (g) =>
   timePayload(Number(g.h), Number(g.m ?? 0), g.q, true),
 );
+rule(PRIO_TIME + 1, `(?:um|gegen|ab)\\s+(?<h>\\d{1,2})\\s*h(?:\\s*(?<m>\\d{2}))?`, (g) => timePayload(Number(g.h), Number(g.m ?? 0), undefined, true));
 rule(PRIO_TIME, `(?:um\\s+|gegen\\s+|ab\\s+)?(?<h>\\d{1,2}):(?<m>\\d{2})(?:\\s*h)?(?:\\s+${Q})?`, (g) =>
   timePayload(Number(g.h), Number(g.m), g.q, true),
 );
@@ -808,9 +842,9 @@ rule(
     return min > 0 && min <= 10080 ? { k: 'duration', min } : null;
   },
 );
-rule(PRIO_PRIORITY, 'dringend|sehr\\s+wichtig|höchste\\s+priorität|hohe\\s+priorität|prio(?:rität)?\\s*(?<n>[1-4])|wichtig', (g, c, m) => {
+rule(PRIO_PRIORITY, 'dringend|asap|schnellstmöglich|so\\s+schnell\\s+wie\\s+möglich|sehr\\s+wichtig|höchste\\s+priorität|hohe\\s+priorität|prio(?:rität)?\\s*(?<n>[1-4])|wichtig', (g, c, m) => {
   if (g.n) return { k: 'priority', p: Number(g.n) as 1 | 2 | 3 | 4 };
-  if (/dringend|sehr|höchste|hoechste/.test(m[0])) return { k: 'priority', p: 1 };
+  if (/dringend|asap|schnellst|so\s+schnell|sehr|höchste|hoechste/.test(m[0])) return { k: 'priority', p: 1 };
   return { k: 'priority', p: 2 };
 });
 
@@ -824,27 +858,41 @@ function explicitMarkers(c: Ctx, out: Cand[]): void {
   const { input } = c;
   const projects = [...(c.projects ?? [])].sort((a, b) => b.name.length - a.name.length);
 
-  for (const m of input.matchAll(/(?<=^|\s)#/g)) {
-    const at = m.index + 1;
-    const rest = input.slice(at);
-    let found: Cand | null = null;
+  const matchProject = (rest: string): { id: string; name: string; len: number } | null => {
     for (const p of projects) {
       for (const name of [p.name, ...(p.aliases ?? [])]) {
         const words = name.trim().split(/[\s\-_]+/).map((w) => escapeRe(w.toLowerCase()));
         const re = new RegExp(`^${de(words.join('[\\s\\-_]+'))}(?![\\p{L}\\p{N}])`, 'iu');
         const mm = re.exec(rest);
-        if (mm) {
-          found = { start: m.index, end: at + mm[0].length, prio: PRIO_EXPLICIT, p: { k: 'project', id: p.id, name: p.name } };
-          break;
-        }
+        if (mm) return { id: p.id, name: p.name, len: mm[0].length };
       }
-      if (found) break;
     }
-    if (!found) {
-      const tok = /^[^\s#@]+/.exec(rest)?.[0]?.replace(/[.,;:!?)]+$/, '');
-      if (tok) found = { start: m.index, end: at + tok.length, prio: PRIO_EXPLICIT, p: { k: 'project', id: null, name: tok } };
+    // Eindeutiger Anfang ab 3 Zeichen: ".ges" → Gesundheit
+    const tok = /^[\p{L}\p{N}_\-]+/u.exec(rest)?.[0];
+    if (!tok || tok.length < 3) return null;
+    const f = fold(tok).replace(/[\s\-_]+/g, '');
+    const hits = projects.filter((p) => !p.isInbox && [p.name, ...(p.aliases ?? [])].some((n) => fold(n).replace(/[\s\-_]+/g, '').startsWith(f)));
+    return hits.length === 1 ? { id: hits[0]!.id, name: hits[0]!.name, len: tok.length } : null;
+  };
+
+  // #Projekt: bestehendes Projekt oder Vorschlag für ein neues
+  for (const m of input.matchAll(/(?<=^|\s)#/g)) {
+    const at = m.index + 1;
+    const rest = input.slice(at);
+    const hit = matchProject(rest);
+    if (hit) {
+      out.push({ start: m.index, end: at + hit.len, prio: PRIO_EXPLICIT, p: { k: 'project', id: hit.id, name: hit.name } });
+      continue;
     }
-    if (found) out.push(found);
+    const tok = /^[^\s#@]+/.exec(rest)?.[0]?.replace(/[.,;:!?)]+$/, '');
+    if (tok) out.push({ start: m.index, end: at + tok.length, prio: PRIO_EXPLICIT, p: { k: 'project', id: null, name: tok } });
+  }
+
+  // .Projekt: Kurzform (leicht auf dem Handy zu tippen), nur für bestehende Projekte
+  for (const m of input.matchAll(/(?<=^|\s)\.(?=\p{L})/gu)) {
+    const at = m.index + 1;
+    const hit = matchProject(input.slice(at));
+    if (hit) out.push({ start: m.index, end: at + hit.len, prio: PRIO_EXPLICIT, p: { k: 'project', id: hit.id, name: hit.name } });
   }
 
   for (const m of input.matchAll(/(?<=^|\s)@([\p{L}\p{N}_\-]+)/gu)) {
@@ -897,16 +945,55 @@ function buildTitle(input: string, removed: [number, number][], reminderAtStart:
   out += input.slice(pos);
   let t = out
     .replace(/\s+/g, ' ')
-    .replace(/\s+([,.;:!?])/g, '$1')
+    .replace(/\s+([,;:!?]|\.(?![\p{L}\p{N}]))/gu, '$1')
     .replace(/([,;:])(?:\s*[,;:])+/g, '$1')
-    .replace(/^[\s,;:.\-–—]+/, '')
+    .replace(/^[\s,;:\-–—]+/, '')
     .replace(/[\s,;:\-–—]+$/, '')
     .replace(/\s+(?:und|oder|sowie|mit)$/i, '')
     .trim();
   if (reminderAtStart) {
     t = t.replace(/^(?:an\s+(?:den|die|das|dem|meinen|meine|mein)?\s*|daran,?\s*(?:dass\s+)?|dass\s+(?:ich\s+)?|zu\s+)/iu, '').trim();
   }
-  return t ? t.charAt(0).toUpperCase() + t.slice(1) : t;
+  if (!t) return t;
+  const first = /^\S+/u.exec(t)![0];
+  // Abkürzungen ("z.B.") und Markennamen mit Großbuchstaben im Wort ("iPhone") nicht anfassen
+  if (/^\p{Ll}\.\p{Ll}?\.?/u.test(first) || /\p{Lu}/u.test(first.slice(1))) return t;
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+const WORD_BEFORE_KEEP = new Set(
+  'beim bei mit für fuer von vom zum zur im am an auf aus in ins den dem der die das des ein eine einen einem einer wegen über ueber unter nach vor ohne gegen um zu fürs ans aufs meinem meinen meiner unserem unseren'.split(' '),
+);
+
+/**
+ * Steht ein im Satz erkannter Projektname wie ein Etikett am Rand ("Zahnarzt anrufen Gesundheit",
+ * "Gesundheit: Zahnarzt anrufen", "Haushalt Fenster putzen"), wird er aus dem Titel entfernt.
+ * Gehört er zum Satz ("Garten umgraben", "Rasen mähen im Garten"), bleibt er stehen.
+ */
+function tagLikeRange(input: string, m: { start: number; end: number }, removed: [number, number][]): [number, number] | null {
+  const covered = (i: number) => removed.some(([a, b]) => i >= a && i < b);
+  const isWord = (ch: string | undefined) => !!ch && /[\p{L}\p{N}]/u.test(ch);
+  let lead = true;
+  for (let i = 0; i < m.start; i++) if (!covered(i) && isWord(input[i])) lead = false;
+  let trail = true;
+  for (let i = m.end; i < input.length; i++) if (!covered(i) && isWord(input[i])) trail = false;
+  if (lead === trail) return null;
+  if (lead) {
+    const sep = /^\s*[:\-–—/|]\s*/u.exec(input.slice(m.end));
+    if (sep) return [m.start, m.end + sep[0].length];
+    let i = m.end;
+    while (i < input.length && (covered(i) || !isWord(input[i]))) i++;
+    const ch = input[i];
+    return ch && ch !== ch.toLowerCase() ? [m.start, m.end] : null;
+  }
+  let i = m.start - 1;
+  while (i >= 0 && (covered(i) || !isWord(input[i]))) i--;
+  let j = i;
+  while (j >= 0 && isWord(input[j]) && !covered(j)) j--;
+  const prev = input.slice(j + 1, i + 1).toLowerCase();
+  if (!prev || WORD_BEFORE_KEEP.has(prev)) return null;
+  const sepBefore = /\s*[:\-–—/|,]\s*$/u.exec(input.slice(0, m.start));
+  return [sepBefore ? m.start - sepBefore[0].length : m.start, m.end];
 }
 
 const WARN_PATTERNS: [RegExp, (m: RegExpExecArray) => string][] = [
@@ -981,6 +1068,7 @@ export function parseTask(input: string, context: ParseContext): ParseResult {
   let remAbs: { date?: PlainDate; time?: PlainTime } | null = null;
   let remPlain = false;
   let reminderAtStart = false;
+  let eveReminder = false;
   let untilDate: PlainDate | null = null;
   let startDate: PlainDate | null = null;
   const extraDates: Cand[] = [];
@@ -1018,6 +1106,10 @@ export function parseTask(input: string, context: ParseContext): ParseResult {
       }
       case 'relReminder':
         result.reminders.push({ kind: 'relative', offsetMin: p.offsetMin });
+        addSpan(cd.start, cd.end, 'reminder');
+        break;
+      case 'eveReminder':
+        eveReminder = true;
         addSpan(cd.start, cd.end, 'reminder');
         break;
       case 'deadlineMarker': {
@@ -1107,6 +1199,20 @@ export function parseTask(input: string, context: ParseContext): ParseResult {
     }
   }
 
+  // "nächsten Monat am 5." / "im Dezember am 3.": Tag im genannten Monat
+  {
+    const all = [dateCand, ...extraDates].filter((d): d is Cand & { p: { k: 'date' } } => !!d && d.p.k === 'date');
+    const monthC = all.find((d) => d.p.src === 'month' && d.p.ym);
+    const dayC = all.find((d) => d.p.src === 'day' && d.p.day);
+    if (monthC && dayC) {
+      const [yy, mm] = monthC.p.ym!;
+      const date = fromParts(yy, mm, Math.min(dayC.p.day!, daysInMonth(yy, mm)));
+      const first = monthC.start < dayC.start ? monthC : dayC;
+      dateCand = { ...first, p: { k: 'date', date, src: 'explicit' } };
+      for (let i = extraDates.length - 1; i >= 0; i--) if (extraDates[i] === monthC || extraDates[i] === dayC) extraDates.splice(i, 1);
+    }
+  }
+
   // "Montag, den 30.11.": das ausdrückliche Datum gewinnt, wenn der Wochentag dazu passt.
   if (dateCand && extraDates.length) {
     const main = dateCand as Cand & { p: { k: 'date' } };
@@ -1190,6 +1296,10 @@ export function parseTask(input: string, context: ParseContext): ParseResult {
   } else if (remPlain) {
     result.reminders.push({ kind: 'relative', offsetMin: 0 });
   }
+  if (eveReminder) {
+    if (dueDate) result.reminders.push({ kind: 'absolute', date: addDays(dueDate, -1), time: c.t.evening });
+    else result.warnings.push('Erinnerung am Vorabend braucht ein Datum');
+  }
   if (result.reminders.some((r) => r.kind === 'relative') && !dueDate) {
     result.warnings.push('Erinnerung braucht ein Datum');
   }
@@ -1205,10 +1315,14 @@ export function parseTask(input: string, context: ParseContext): ParseResult {
       result.projectId = ids[0]!;
       result.projectVia = matches.find((m) => m.id === ids[0])!.via;
       for (const m of matches.filter((x) => x.id === ids[0])) {
-        result.spans.push({ start: m.start, end: m.end, type: 'project', text: input.slice(m.start, m.end), implicit: true });
+        const strip = tagLikeRange(input, m, removed);
+        if (strip) removed.push(strip);
+        result.spans.push({ start: m.start, end: m.end, type: 'project', text: input.slice(m.start, m.end), ...(strip ? {} : { implicit: true }) });
       }
     } else if (ids.length > 1) {
       result.projectSuggestions = ids;
+    } else {
+      result.projectSuggestions = findCompoundProjects(input, removed, c.projects);
     }
   }
 

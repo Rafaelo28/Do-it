@@ -5,4 +5,5 @@ export * from './hlc';
 export * from './model';
 export * from './sync';
 export * from './tasks';
+export * from './karma';
 export { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';

@@ -53,7 +53,9 @@ export function BriefingsView() {
       </div>
       {!list.length && (
         <div className="empty">
-          <div className="big">✨</div>
+          <div className="big">
+            <IconSparkle size={40} />
+          </div>
           Noch keine Briefings. Verbinde Claude in den <Link href="/settings">Einstellungen</Link> und lass dir jeden Morgen eine Zusammenfassung schreiben.
         </div>
       )}

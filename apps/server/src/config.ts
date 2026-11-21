@@ -19,12 +19,17 @@ const schema = z.object({
     .transform((v) => v === 'true' || v === '1'),
   WORKER_INTERVAL_MS: z.coerce.number().int().min(1000).default(20000),
   LOG_LEVEL: z.string().default('info'),
+  /** fester Einrichtungscode (sonst zufällig erzeugt und im Log angezeigt) */
+  SETUP_CODE: z.string().min(6).max(64).optional(),
+  /** Anfragen pro Minute und IP auf /api, /oauth und /mcp */
+  RATE_LIMIT_PER_MIN: z.coerce.number().int().min(30).default(600),
 });
 
 export type Config = z.infer<typeof schema> & { origins: string[]; secureCookies: boolean };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const parsed = schema.parse(env);
+  // Leere Werte (z. B. aus "${VAR:-}" in docker-compose) wie nicht gesetzt behandeln
+  const parsed = schema.parse(Object.fromEntries(Object.entries(env).filter(([, v]) => v !== '')));
   const appOrigin = new URL(parsed.APP_URL).origin;
   const origins = [appOrigin, ...parsed.ALLOWED_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean)];
   return { ...parsed, origins, secureCookies: appOrigin.startsWith('https:') };

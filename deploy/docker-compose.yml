@@ -3,13 +3,30 @@
 # Update:  ./update.sh
 name: do-it
 
+# Gemeinsame Härtung: keine zusätzlichen Rechte im Container, Logs begrenzt (sonst läuft die Platte irgendwann voll)
+x-hardening: &hardening
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
 x-app-env: &app-env
   DATABASE_URL: postgres://doit:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD in .env setzen}@db:5432/doit
   APP_URL: ${APP_URL:-https://do-it.gerda-hilft.de}
   LOG_LEVEL: ${LOG_LEVEL:-info}
+  RATE_LIMIT_PER_MIN: ${RATE_LIMIT_PER_MIN:-600}
+  # optional, sonst automatisch erzeugt und in der Datenbank gespeichert
+  AUTH_SECRET: ${AUTH_SECRET:-}
+  VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+  VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+  VAPID_SUBJECT: ${VAPID_SUBJECT:-}
 
 services:
   db:
+    <<: *hardening
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
@@ -25,6 +42,9 @@ services:
       retries: 6
 
   app:
+    <<: *hardening
+    # Node braucht keine Linux-Capabilities (Port 8080, läuft als Benutzer "node")
+    cap_drop: [ALL]
     build:
       context: ..
       dockerfile: deploy/Dockerfile
@@ -40,6 +60,8 @@ services:
       - "127.0.0.1:8080:8080"
 
   worker:
+    <<: *hardening
+    cap_drop: [ALL]
     image: do-it:local
     restart: unless-stopped
     command: ["node", "dist/worker.js"]
@@ -54,6 +76,8 @@ services:
       disable: true
 
   cloudflared:
+    <<: *hardening
+    cap_drop: [ALL]
     # Version bei Bedarf festpinnen, z. B. cloudflare/cloudflared:2026.11.0
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
@@ -64,6 +88,7 @@ services:
       - app
 
   backup:
+    <<: *hardening
     image: postgres:17-alpine
     restart: unless-stopped
     entrypoint: ["/bin/sh", "/backup.sh"]

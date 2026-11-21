@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomBytes, scrypt as scryptCb, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { DEFAULT_SETTINGS, generateKeyBetween, uuidv7, type Me, type UserSettings } from '@do-it/shared';
+import type { FastifyRequest } from 'fastify';
 import type { Queryable } from './db';
 import { lockObjects } from './db';
 
@@ -43,7 +44,16 @@ export function newToken(bytes = 32): string {
   return randomBytes(bytes).toString('base64url');
 }
 
-export const SESSION_COOKIE = 'doit_session';
+/** Alter Cookie-Name (vor __Host-); wird noch gelesen, damit niemand abgemeldet wird. */
+export const LEGACY_SESSION_COOKIE = 'doit_session';
+
+/**
+ * Über HTTPS mit __Host-Präfix: der Browser erlaubt das Cookie dann nur mit Secure, ohne Domain und mit Path=/,
+ * es kann also von keiner Subdomain gesetzt oder überschrieben werden.
+ */
+export function sessionCookieName(secure: boolean): string {
+  return secure ? '__Host-doit_session' : LEGACY_SESSION_COOKIE;
+}
 export const SESSION_DAYS = 180;
 
 export interface UserRow {
@@ -56,6 +66,11 @@ export interface UserRow {
   is_admin: boolean;
   ical_token: string | null;
   last_briefing_date: string | null;
+  totp_secret: string | null;
+  totp_enabled: boolean;
+  totp_last_step: number | null;
+  recovery_codes: string[];
+  avatar_at: Date | null;
 }
 
 export function settingsOf(u: Pick<UserRow, 'settings'>): UserSettings {
@@ -63,7 +78,21 @@ export function settingsOf(u: Pick<UserRow, 'settings'>): UserSettings {
 }
 
 export function toMe(u: UserRow): Me {
-  return { id: u.id, name: u.name, email: u.email, timezone: u.timezone, isAdmin: u.is_admin, settings: settingsOf(u) };
+  return {
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    timezone: u.timezone,
+    isAdmin: u.is_admin,
+    settings: settingsOf(u),
+    twoFactor: !!u.totp_enabled,
+    avatar: avatarUrl(u.id, u.avatar_at),
+  };
+}
+
+/** Adresse des Profilbilds; die Version im Link sorgt dafür, dass Browser ein neues Bild sofort laden. */
+export function avatarUrl(userId: string, at: Date | string | null): string | null {
+  return at ? `/api/avatars/${userId}?v=${new Date(at).getTime()}` : null;
 }
 
 export async function createSession(q: Queryable, userId: string, userAgent: string | undefined): Promise<string> {
@@ -95,6 +124,20 @@ export async function userForSession(q: Queryable, token: string | undefined): P
 
 export async function deleteSession(q: Queryable, token: string | undefined): Promise<void> {
   if (token) await q.query('DELETE FROM sessions WHERE token_hash = $1', [sha256(token)]);
+}
+
+/**
+ * IP des Aufrufers: hinter Cloudflare aus cf-connecting-ip (die App ist nur über den Tunnel
+ * und lokal erreichbar, der Header kann also nicht von außen gefälscht werden), sonst die Socket-Adresse.
+ */
+export function clientIpOf(req: FastifyRequest): string {
+  const cf = req.headers['cf-connecting-ip'];
+  if (typeof cf === 'string' && cf) return cf;
+  try {
+    return req.ip || 'unbekannt';
+  } catch {
+    return 'unbekannt'; // z. B. bei WebSocket-Anfragen ohne echten Socket (Tests)
+  }
 }
 
 export function normalizeEmail(email: string): string {
@@ -160,4 +203,24 @@ export class RateLimiter {
   private prune(now: number): void {
     for (const [k, v] of this.hits) if (v.reset < now) this.hits.delete(k);
   }
+}
+
+const COMMON_PASSWORDS = new Set(
+  (
+    '12345678 123456789 1234567890 0123456789 87654321 11111111 00000000 12341234 password password1 password123 passwort passwort1 ' +
+    'passwort12 passwort123 passwort1234 qwertz12 qwertz123 qwertzuiop qwerty12 qwerty123 qwertyuiop asdfghjk iloveyou ichliebedich hallo123 hallo1234 ' +
+    'sommer2024 sommer2025 sommer2026 winter2025 winter2026 fussball schalke04 bayern1900 dortmund09 letmein1 welcome1 admin123 ' +
+    'abcd1234 abc12345 1q2w3e4r 1qay2wsx 1qaz2wsx'
+  ).split(' '),
+);
+
+/** Häufige oder offensichtliche Passwörter ablehnen. Gibt eine Fehlermeldung zurück oder null. */
+export function passwordProblem(password: string, email: string, name: string): string | null {
+  const p = password.toLowerCase();
+  if (COMMON_PASSWORDS.has(p)) return 'Dieses Passwort ist zu bekannt. Bitte ein anderes wählen.';
+  if (/^(.)\1+$/.test(p)) return 'Bitte kein Passwort aus nur einem Zeichen.';
+  if (p === email.toLowerCase() || p === email.toLowerCase().split('@')[0] || (name.length >= 3 && p === name.toLowerCase())) {
+    return 'Das Passwort darf nicht dein Name oder deine E-Mail sein.';
+  }
+  return null;
 }

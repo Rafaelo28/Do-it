@@ -19,6 +19,12 @@ export const IconToday = (p: P) => (
     </text>
   </Svg>
 );
+export const IconSun = (p: P) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+  </Svg>
+);
 export const IconCalendar = (p: P) => (
   <Svg {...p}>
     <rect x="3" y="4" width="18" height="17" rx="3" />
@@ -121,5 +127,50 @@ export const IconWarn = (p: P) => (
 export const IconSparkle = (p: P) => (
   <Svg {...p}>
     <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />
+  </Svg>
+);
+export const IconFlame = (p: P) => (
+  <Svg {...p}>
+    <path d="M12 3c.5 3-2 4.5-2 7a2 2 0 0 0 4 0c0-.8-.3-1.5-.6-2.1C15.6 9.3 18 11.6 18 15a6 6 0 0 1-12 0c0-4.4 3.6-6.3 6-12z" />
+  </Svg>
+);
+export const IconLeaf = (p: P) => (
+  <Svg {...p}>
+    <path d="M5 19c0-8 5-13 15-14-1 10-6 15-14 15" />
+    <path d="M5 19l7-7" />
+  </Svg>
+);
+export const IconX = (p: P) => (
+  <Svg {...p}>
+    <path d="M18 6L6 18M6 6l12 12" />
+  </Svg>
+);
+export const IconGrip = (p: P) => (
+  <Svg {...p} strokeWidth={0} fill="currentColor">
+    <circle cx="9" cy="6" r="1.6" />
+    <circle cx="15" cy="6" r="1.6" />
+    <circle cx="9" cy="12" r="1.6" />
+    <circle cx="15" cy="12" r="1.6" />
+    <circle cx="9" cy="18" r="1.6" />
+    <circle cx="15" cy="18" r="1.6" />
+  </Svg>
+);
+export const IconSubtasks = (p: P) => (
+  <Svg {...p}>
+    <path d="M4 5h4M4 5v12a2 2 0 0 0 2 2h4M4 12h6" />
+    <rect x="13" y="9" width="7" height="6" rx="1.5" />
+    <rect x="13" y="16" width="7" height="6" rx="1.5" />
+  </Svg>
+);
+export const IconCheckCircle = (p: P) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M8 12.5l2.8 2.8L16.5 9.5" />
+  </Svg>
+);
+export const IconDone = (p: P) => (
+  <Svg {...p}>
+    <path d="M3 12.5l4 4L15 8.5" />
+    <path d="M10 15.5l1 1 9-9" />
   </Svg>
 );

@@ -197,7 +197,44 @@ const CASES: [string, Expect][] = [
   ['Montag früh Auto in die Werkstatt', { title: 'Auto in die Werkstatt', dueDate: '2026-11-23', dueTime: '08:00' }],
   ['Zahnarzt 2027-01-15 10:30', { title: 'Zahnarzt', dueDate: '2027-01-15', dueTime: '10:30' }],
 
+  // --- Erinnerungen in vielen Formen ---
+  ['Zahnarzt morgen 10 Uhr Erinnerung 30 Minuten vorher', { title: 'Zahnarzt', dueTime: '10:00', reminders: [{ kind: 'relative', offsetMin: 30 }] }],
+  ['Zahnarzt morgen 10 Uhr erinnere mich 30 min vor dem Termin', { title: 'Zahnarzt', reminders: [{ kind: 'relative', offsetMin: 30 }] }],
+  ['Zahnarzt morgen 10 Uhr sag mir 30 Minuten vorher Bescheid', { title: 'Zahnarzt', reminders: [{ kind: 'relative', offsetMin: 30 }] }],
+  ['Zahnarzt morgen 10 Uhr, 30 Minuten vorher erinnern lassen', { title: 'Zahnarzt', reminders: [{ kind: 'relative', offsetMin: 30 }] }],
+  ['Zahnarzt morgen 10 Uhr Erinnerung 30 Minuten vorher und 1 Tag vorher', { title: 'Zahnarzt', reminders: [{ kind: 'relative', offsetMin: 30 }, { kind: 'relative', offsetMin: 1440 }] }],
+  ['Zahnarzt morgen 10 Uhr erinnere mich am Vorabend', { title: 'Zahnarzt', reminders: [{ kind: 'absolute', date: '2026-11-20', time: '19:00' }] }],
+
+  // --- Projekte: .Kurzform und Name allein ---
+  ['.Gesundheit Zahnarzt anrufen', { title: 'Zahnarzt anrufen', projectId: 'p-gesundheit', projectVia: 'explicit' }],
+  ['Zahnarzt anrufen .gesundheit', { title: 'Zahnarzt anrufen', projectId: 'p-gesundheit', projectVia: 'explicit' }],
+  ['.web Texte schreiben', { title: 'Texte schreiben', projectId: 'p-web', projectVia: 'explicit' }],
+  ['Arzt anrufen #ges', { title: 'Arzt anrufen', projectId: 'p-gesundheit', newProjectName: null }],
+  ['Neues Logo #Marketing-Team', { projectId: null, newProjectName: 'Marketing-Team' }],
+  ['.haushalt Fenster putzen', { title: 'Fenster putzen', projectId: 'p-haushalt' }],
+  ['.hau Fenster putzen', { projectId: null }],
+  ['.NET lernen', { title: '.NET lernen', projectId: null, newProjectName: null }],
+  ['Zahnarzt anrufen Gesundheit', { title: 'Zahnarzt anrufen', projectId: 'p-gesundheit' }],
+  ['Gesundheit: Zahnarzt anrufen', { title: 'Zahnarzt anrufen', projectId: 'p-gesundheit' }],
+  ['Haushalt Fenster putzen morgen', { title: 'Fenster putzen', projectId: 'p-haushalt', dueDate: '2026-11-21' }],
+  ['Garten umgraben', { title: 'Garten umgraben', projectId: 'p-garten' }],
+  ['Rasen mähen im Garten', { title: 'Rasen mähen im Garten', projectId: 'p-garten' }],
+  ['Gartenschere schärfen', { title: 'Gartenschere schärfen', projectId: null, projectSuggestions: ['p-garten'] }],
+  ['Arbeitszeugnis anfordern', { projectId: null, projectSuggestions: ['p-arbeit'] }],
+
+  // --- Weitere Datumsformen ---
+  ['Steuer bis 24.12', { title: 'Steuer', dueDate: '2026-12-24' }],
+  ['Miete am 3.', { title: 'Miete', dueDate: '2026-12-03' }],
+  ['bis zum 25. Wichtelgeschenk kaufen', { title: 'Wichtelgeschenk kaufen', dueDate: '2026-11-25' }],
+  ['nächsten Monat am 5. Auto zum TÜV', { title: 'Auto zum TÜV', dueDate: '2026-12-05', warnings: [] }],
+  ['am 15. des Monats Abrechnung', { title: 'Abrechnung', dueDate: '2026-12-15' }],
+  ['um 18h Training', { title: 'Training', dueDate: '2026-11-20', dueTime: '18:00' }],
+  ['asap Rückruf Versicherung', { title: 'Rückruf Versicherung', priority: 1 }],
+
   // --- Keine Fehlalarme ---
+  ['Bericht 2.5 schreiben', { title: 'Bericht 2.5 schreiben', dueDate: null }],
+  ['iPhone reparieren lassen', { title: 'iPhone reparieren lassen' }],
+  ['z.B. Brot kaufen', { title: 'z.B. Brot kaufen' }],
   ['Rechnung 47,50 € bezahlen', { title: 'Rechnung 47,50 € bezahlen', dueDate: null, durationMin: null }],
   ['Zimmer 3.14 streichen', { title: 'Zimmer 3.14 streichen', dueDate: null }],
   ['Frühstück vorbereiten', { title: 'Frühstück vorbereiten', dueTime: null }],
@@ -206,7 +243,7 @@ const CASES: [string, Expect][] = [
   ['Buch "Die Morgenröte" lesen', { title: 'Buch "Die Morgenröte" lesen', dueDate: null }],
   ['Guten Morgen sagen', { title: 'Guten Morgen sagen', dueDate: null }],
   ['Sonntagszeitung kaufen', { title: 'Sonntagszeitung kaufen', dueDate: null }],
-  ['So schnell wie möglich Auto reparieren', { title: 'So schnell wie möglich Auto reparieren', dueDate: null }],
+  ['So schnell wie möglich Auto reparieren', { title: 'Auto reparieren', dueDate: null, priority: 1 }],
   ['Milch, Eier und Brot kaufen', { title: 'Milch, Eier und Brot kaufen', dueDate: null, priority: 4 }],
   ['C++ lernen', { title: 'C++ lernen', assigneeId: null }],
   ['Mail an max@example.com', { title: 'Mail an max@example.com', labels: [] }],

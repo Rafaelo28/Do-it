@@ -25,14 +25,15 @@
 
 | Phase | Stand | Was drin ist |
 |---|---|---|
-| 0 – Fundament | ✅ fertig | pnpm-Monorepo, TypeScript, Vitest, GitHub Actions (Typecheck, Tests mit Postgres, Build, Docker-Build) |
-| 1 – Kern-App offline | ✅ fertig | PWA mit IndexedDB, Ansichten Heute/Demnächst/Projekte/Labels/Suche/Filter, Unteraufgaben, Abschnitte, Sortieren per Ziehen, Parser mit Live-Markierung |
-| 2 – Sync + Server | ✅ fertig | Cursor-Sync mit feldweisem Mergen, WebSocket-Anstupser, Docker-Image, Compose mit Cloudflare Tunnel, Backups, Update-/Restore-Skripte |
-| 3 – Erinnerungen | ✅ fertig | Web Push (VAPID automatisch), Erinnerungs-Dienst mit Zeitzonen, Aktionen Erledigt/In 1 Std./Morgen, Morgen-Briefing, App-Badge |
-| 4 – Gemeinsam | ✅ fertig | Einladungslinks, Rollen, Zuweisen, Rotation, Kommentare, Verlauf, Benachrichtigung bei Zuweisung und Kommentar |
-| 5 – Schlauer Parser | ✅ weitgehend | 174 Korpus-Sätze, Feiertage, Jahreszeiten, „außer“, Projekt-Aliasse, lokal gelernte Projektvorschläge, Mehrzeilen-Eingabe, Teilen-Ziel |
-| 7 – Claude | ✅ fertig | MCP-Connector mit OAuth 2.1 (wie Todoist), Werkzeuge für Überblick, Suche, Anlegen per Parser, Ändern, Abhaken, Briefings in App + Push, persönliche Schlüssel – siehe `docs/claude.md` |
-| 6 – Extras | 🟡 teilweise | ✅ Kalender-Abo, Filter, Todoist-Import (CSV), Tastenkürzel · ⏳ Statistiken, ntfy/E-Mail-Kanal, Passwort-Reset per Mail (braucht SMTP), Passkeys |
+| 0 – Fundament | fertig | pnpm-Monorepo, TypeScript, Vitest, GitHub Actions (Typecheck, Tests mit Postgres, Build, Docker-Build) |
+| 1 – Kern-App offline | fertig | PWA mit IndexedDB, Ansichten Heute/Demnächst/Projekte/Labels/Suche/Filter, Unteraufgaben, Abschnitte, Sortieren per Ziehen, Parser mit Live-Markierung |
+| 2 – Sync + Server | fertig | Cursor-Sync mit feldweisem Mergen, WebSocket-Anstupser, Docker-Image, Compose mit Cloudflare Tunnel, Backups, Update-/Restore-Skripte |
+| 3 – Erinnerungen | fertig | Web Push (VAPID automatisch), Erinnerungs-Dienst mit Zeitzonen, Aktionen Erledigt/In 1 Std./Morgen, Morgen-Briefing, App-Badge |
+| 4 – Gemeinsam | fertig | Einladungslinks, Rollen, Zuweisen, Rotation, Kommentare, Verlauf, Benachrichtigung bei Zuweisung und Kommentar |
+| 5 – Schlauer Parser | weitgehend | 174 Korpus-Sätze, Feiertage, Jahreszeiten, „außer“, Projekt-Aliasse, lokal gelernte Projektvorschläge, Mehrzeilen-Eingabe, Teilen-Ziel |
+| 7 – Claude | fertig | MCP-Connector mit OAuth 2.1 (wie Todoist), Werkzeuge für Überblick, Suche, Anlegen per Parser, Ändern, Abhaken, Briefings in App + Push, persönliche Schlüssel – siehe `docs/claude.md` |
+| 8 – Absicherung | fertig | Einrichtungscode fürs erste Konto, Zwei-Faktor-Anmeldung (TOTP) mit Wiederherstellungscodes, Geräteliste, `__Host-`-Cookie, HSTS, CSP, Anfrage-Limits, Passwort-Sperrliste, gehärtete Container |
+| 6 – Extras | teilweise | Fertig: Kalender-Abo, Filter, Todoist-Import (API-Schlüssel, Backup-ZIP, CSV), Tastenkürzel, Erledigt-Übersicht, Karma mit Stufen/Zielen/Serien, Profilbilder. Offen: ntfy/E-Mail-Kanal, Passwort-Reset per Mail (braucht SMTP), Passkeys |
 
 **Abweichungen vom ursprünglichen Plan** (bewusst, zugunsten von Einfachheit):
 - Statt Drizzle ORM: eine schlanke eigene Query-Schicht mit SQL-Migrationen.

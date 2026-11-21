@@ -2,15 +2,22 @@ import type { Me, UserSettings } from '@do-it/shared';
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { useData } from '../lib/data';
-import { applyImport, planTodoistImport, type ImportPlan } from '../lib/todoist';
 import { currentSubscription, disablePush, enablePush, isIos, isStandalone, pushSupported } from '../lib/push';
 import { toast } from '../lib/store';
 import { sync, syncState, wipeLocalData } from '../lib/sync';
 import { nowLocal, setTimeZone } from '../lib/time';
+import { IconWarn } from '../components/Icons';
+import { Sessions, TwoFactor } from './Security';
+import { TodoistImport } from './TodoistImport';
+import { ProfilePhoto } from '../components/AvatarEditor';
+import { addDays, WEEKDAYS_SHORT } from '@do-it/shared';
+import { refreshKarma } from '../lib/karma';
 
-function zones(): string[] {
+function zones(current: string): string[] {
   const fn = (Intl as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf;
-  return fn ? fn('timeZone') : ['Europe/Berlin', 'Europe/Vienna', 'Europe/Zurich', 'UTC'];
+  const list = fn ? fn('timeZone') : ['Europe/Berlin', 'Europe/Vienna', 'Europe/Zurich', 'UTC'];
+  // Die eigene Zeitzone muss immer wählbar sein (z. B. "UTC" fehlt in manchen Browsern)
+  return list.includes(current) ? list : [current, ...list];
 }
 
 export function SettingsView() {
@@ -25,10 +32,13 @@ export function SettingsView() {
       <ClaudeConnect />
       <Profile me={me} key={`p-${me.name}-${me.timezone}`} />
       <Times me={me} key={`t-${JSON.stringify(me.settings)}`} />
+      <KarmaSettings me={me} key={`k-${JSON.stringify([me.settings.dailyGoal, me.settings.weeklyGoal])}`} />
       <Calendar />
       {me.isAdmin && <InviteAccount />}
       <TodoistImport me={me} />
       <Password />
+      <TwoFactor me={me} />
+      <Sessions />
       <section className="card" style={{ marginTop: 16, display: 'grid', gap: 10 }}>
         <strong>App</strong>
         <span className="small muted">
@@ -131,11 +141,11 @@ function Notifications({ me }: { me: Me }) {
   );
 }
 
-async function saveMe(body: { name?: string; timezone?: string; settings?: Partial<UserSettings> }) {
+async function saveMe(body: { name?: string; timezone?: string; settings?: Partial<UserSettings> }, opts: { quiet?: boolean } = {}) {
   const r = await api<{ user: Me }>('PATCH', '/api/me', body);
   syncState.set((s) => ({ ...s, me: r.user }));
   setTimeZone(r.user.timezone);
-  toast('Gespeichert');
+  if (!opts.quiet) toast('Gespeichert');
 }
 
 function BriefingSettings({ me }: { me: Me }) {
@@ -169,6 +179,7 @@ function Profile({ me }: { me: Me }) {
   return (
     <section className="card" style={{ marginTop: 16, display: 'grid', gap: 10 }}>
       <strong>Profil</strong>
+      <ProfilePhoto me={me} />
       <div className="grid2">
         <label className="field">
           <span>Name</span>
@@ -177,7 +188,7 @@ function Profile({ me }: { me: Me }) {
         <label className="field">
           <span>Zeitzone</span>
           <select className="input" value={tz} onChange={(e) => setTz(e.target.value)}>
-            {zones().map((z) => (
+            {zones(me.timezone).map((z) => (
               <option key={z}>{z}</option>
             ))}
           </select>
@@ -395,70 +406,6 @@ function ClaudeConnect() {
   );
 }
 
-function TodoistImport({ me }: { me: Me }) {
-  const { projects, labels, inbox } = useData();
-  const [plan, setPlan] = useState<ImportPlan | null>(null);
-  const [progress, setProgress] = useState<string | null>(null);
-
-  async function onFiles(list: FileList | null) {
-    if (!list?.length) return;
-    const files = await Promise.all([...list].map(async (f) => ({ name: f.name, text: await f.text() })));
-    const now = nowLocal();
-    setPlan(planTodoistImport(files, { today: now.date, now: now.time }));
-  }
-
-  async function run() {
-    if (!plan || !inbox) return;
-    setProgress('0');
-    const batch: { type: Parameters<typeof sync.mutateMany>[0][number]['type']; id: string; data: Record<string, unknown> }[] = [];
-    await applyImport(plan, {
-      me,
-      inboxId: inbox.id,
-      existingProjects: projects,
-      existingLabels: labels.map((l) => l.name),
-      mutate: async (type, id, data) => void batch.push({ type, id, data }),
-    });
-    for (let i = 0; i < batch.length; i += 500) {
-      await sync.mutateMany(batch.slice(i, i + 500));
-      setProgress(`${Math.min(i + 500, batch.length)} / ${batch.length}`);
-    }
-    toast(`${plan.taskCount} Aufgaben aus Todoist übernommen`);
-    setPlan(null);
-    setProgress(null);
-  }
-
-  return (
-    <section className="card" style={{ marginTop: 16, display: 'grid', gap: 10 }}>
-      <strong>Aus Todoist übernehmen</strong>
-      <span className="small muted">
-        In Todoist unter Einstellungen → Backups ein Backup herunterladen und entpacken. Dann hier alle CSV-Dateien auf einmal auswählen. Gleichnamige Projekte werden ergänzt, „Inbox“ landet im Eingang.
-      </span>
-      <input type="file" accept=".csv,text/csv" multiple onChange={(e) => void onFiles(e.target.files)} />
-      {plan && (
-        <div className="hint" style={{ display: 'grid', gap: 6 }}>
-          <span>
-            {plan.projects.length} Projekte · {plan.taskCount} Aufgaben · {plan.commentCount} Kommentare
-          </span>
-          {plan.warnings.slice(0, 5).map((w) => (
-            <span key={w} className="small">
-              ⚠ {w}
-            </span>
-          ))}
-          {plan.warnings.length > 5 && <span className="small">… und {plan.warnings.length - 5} weitere Hinweise</span>}
-          <div className="row">
-            <button className="btn primary" disabled={!!progress || !plan.taskCount} onClick={() => void run()}>
-              {progress ? `Übernehme … ${progress}` : 'Jetzt übernehmen'}
-            </button>
-            <button className="btn ghost" disabled={!!progress} onClick={() => setPlan(null)}>
-              Abbrechen
-            </button>
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
-
 function Password() {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -486,6 +433,98 @@ function Password() {
           Ändern
         </button>
       </div>
+    </section>
+  );
+}
+
+/** Karma: Ziele, freie Tage, Urlaub – oder ganz ausblenden. */
+function KarmaSettings({ me }: { me: Me }) {
+  const s = me.settings;
+  const [daily, setDaily] = useState(String(s.dailyGoal));
+  const [weekly, setWeekly] = useState(String(s.weeklyGoal));
+  const today = nowLocal().date;
+  const vacation = s.vacations.find((v) => v.to === null || v.to >= today) ?? null;
+  // Schalter wirken sofort und sichtbar – dafür braucht es keine extra Meldung
+  const save = async (settings: Partial<UserSettings>, quiet = true) => {
+    try {
+      await saveMe({ settings }, { quiet });
+      void refreshKarma();
+    } catch (e) {
+      toast((e as Error).message, { kind: 'error' });
+    }
+  };
+  const goalsChanged = Number(daily) !== s.dailyGoal || Number(weekly) !== s.weeklyGoal;
+  const valid = Number(daily) >= 1 && Number(daily) <= 100 && Number(weekly) >= 1 && Number(weekly) <= 700;
+
+  function toggleVacation() {
+    if (vacation) {
+      // Urlaub endet gestern; hat er heute erst begonnen, fällt er ganz weg
+      const end = addDays(today, -1);
+      const list = s.vacations.flatMap((v) => (v === vacation ? (v.from > end ? [] : [{ ...v, to: end }]) : [v]));
+      void save({ vacations: list });
+    } else {
+      void save({ vacations: [...s.vacations, { from: today, to: null }].slice(-20) });
+    }
+  }
+
+  return (
+    <section id="karma" className="card" style={{ marginTop: 16, display: 'grid', gap: 10 }}>
+      <strong>Karma</strong>
+      <label className="row small" style={{ gap: 8 }}>
+        <input type="checkbox" checked={s.karmaEnabled} onChange={(e) => void save({ karmaEnabled: e.target.checked })} />
+        Karma anzeigen (Punkte, Stufen und Serien fürs Erledigen)
+      </label>
+      {s.karmaEnabled && (
+        <>
+          <div className="grid2">
+            <label className="field">
+              <span>Tagesziel (erledigte Aufgaben)</span>
+              <input className="input" type="number" min={1} max={100} inputMode="numeric" value={daily} onChange={(e) => setDaily(e.target.value)} />
+            </label>
+            <label className="field">
+              <span>Wochenziel</span>
+              <input className="input" type="number" min={1} max={700} inputMode="numeric" value={weekly} onChange={(e) => setWeekly(e.target.value)} />
+            </label>
+          </div>
+          {goalsChanged && (
+            <div>
+              <button className="btn primary" disabled={!valid} onClick={() => void save({ dailyGoal: Number(daily), weeklyGoal: Number(weekly) }, false)}>
+                Ziele speichern
+              </button>
+            </div>
+          )}
+          <div className="field">
+            <span className="small" style={{ fontWeight: 600, color: 'var(--muted)' }}>
+              Freie Tage (unterbrechen keine Serie)
+            </span>
+            <div className="weekday-chips">
+              {WEEKDAYS_SHORT.map((d, i) => {
+                const day = i + 1;
+                const on = s.daysOff.includes(day);
+                return (
+                  <button
+                    key={d}
+                    className={`chip ${on ? 'on' : ''}`}
+                    aria-pressed={on}
+                    disabled={!on && s.daysOff.length >= 6}
+                    onClick={() => void save({ daysOff: on ? s.daysOff.filter((x) => x !== day) : [...s.daysOff, day].sort() })}
+                  >
+                    {d}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="row" style={{ gap: 10 }}>
+            <button className="btn" onClick={toggleVacation}>
+              {vacation ? 'Urlaub beenden' : 'Urlaub starten'}
+            </button>
+            <span className="small muted">
+              {vacation ? `Im Urlaub seit ${new Date(`${vacation.from}T12:00:00`).toLocaleDateString('de-DE')} – deine Serie pausiert.` : 'Im Urlaub pausiert deine Serie.'}
+            </span>
+          </div>
+        </>
+      )}
     </section>
   );
 }
