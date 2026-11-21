@@ -1,4 +1,5 @@
-import { IconSun } from '../components/Icons';
+import { IconFlag, IconSun } from '../components/Icons';
+import { Link } from 'wouter';
 import { addDays, formatDateLong, formatDateRelative } from '@do-it/shared';
 import { useState } from 'react';
 import { QuickAdd } from '../components/QuickAdd';
@@ -19,6 +20,10 @@ export function TodayView() {
   const open = tasks.filter((t) => !t.completedAt && t.dueDate && mine(t));
   const overdue = open.filter((t) => t.dueDate! < now.date).sort(byDue);
   const today = open.filter((t) => t.dueDate === now.date).sort(byDue);
+  // Deadlines heute oder überschritten, die nicht ohnehin schon oben stehen
+  const deadlines = tasks
+    .filter((t) => !t.completedAt && mine(t) && t.deadline && t.deadline <= now.date && !(t.dueDate && t.dueDate <= now.date))
+    .sort((a, b) => (a.deadline! < b.deadline! ? -1 : 1));
   const doneToday = tasks.filter((t) => {
     const at = t.completedAt ?? t.lastCompletedAt;
     return !!at && localDateOf(at) === now.date && mine(t);
@@ -51,6 +56,14 @@ export function TodayView() {
             </button>
           </div>
           <TaskList tasks={overdue} />
+        </>
+      )}
+      {deadlines.length > 0 && (
+        <>
+          <div className="group-head" style={{ color: 'var(--danger)' }}>
+            Deadline heute oder überschritten <span className="muted">{deadlines.length}</span>
+          </div>
+          <TaskList tasks={deadlines} />
         </>
       )}
       <div className="group-head">
@@ -103,6 +116,7 @@ export function UpcomingView() {
       )}
       {days.map((d) => {
         const list = open.filter((t) => t.dueDate === d);
+        const dls = tasks.filter((t) => !t.completedAt && mine(t) && t.deadline === d && t.dueDate !== d);
         const rel = formatDateRelative(d, now.date);
         return (
           <section key={d}>
@@ -110,6 +124,12 @@ export function UpcomingView() {
               {['Heute', 'Morgen', 'Übermorgen'].includes(rel) ? `${rel} · ${formatDateLong(d)}` : formatDateLong(d)}
               <span className="muted">{list.length || ''}</span>
             </div>
+            {dls.map((t) => (
+              <Link key={t.id} href={`/task/${t.id}`} className="deadline-line">
+                <IconFlag size={13} /> Deadline: {t.title}
+                {t.dueDate && <span className="muted"> · geplant {formatDateRelative(t.dueDate, now.date)}</span>}
+              </Link>
+            ))}
             {list.length > 0 && <TaskList tasks={list} />}
             <DayAdd date={d} />
           </section>

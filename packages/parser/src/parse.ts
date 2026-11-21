@@ -137,7 +137,7 @@ type Payload =
   | { k: 'relReminder'; offsetMin: number }
   | { k: 'eveReminder' }
   | { k: 'remMarker' }
-  | { k: 'deadlineMarker' }
+  | { k: 'deadlineMarker'; strict: boolean }
   | { k: 'offset'; days: number }
   | { k: 'priority'; p: 1 | 2 | 3 | 4 }
   | { k: 'project'; id: string | null; name: string }
@@ -316,7 +316,9 @@ rule(PRIO_REMINDER, `(?:sag|gib)\\s+mir\\s+(?<n>${NUM})\\s*${UNIT}\\s+(?:vorher|
 });
 rule(PRIO_REMINDER, `${REM}\\s+(?:zur\\s+fälligkeit|pünktlich|zum\\s+termin|rechtzeitig)`, () => ({ k: 'relReminder', offsetMin: 0 }));
 rule(PRIO_MARKER + 2, `${REM}(?:\\s*:)?`, () => ({ k: 'remMarker' }));
-rule(PRIO_MARKER, `(?:deadline|frist|abgabefrist|fällig\\s+spätestens)(?:\\s*:)?(?:\\s+(?:ist|am|bis|zum))?`, () => ({ k: 'deadlineMarker' }));
+rule(PRIO_MARKER, `(?:deadline|frist|abgabefrist|fällig\\s+spätestens)(?:\\s*:)?(?:\\s+(?:ist|am|bis|zum))?`, () => ({ k: 'deadlineMarker', strict: true }));
+// weichere Deadline-Wörter: nur wenn ein Datum folgt, sonst bleiben sie normaler Text
+rule(PRIO_MARKER, `(?:(?:bis\\s+)?spätestens(?:\\s+(?:am|bis|zum))?|abgabe(?:termin|datum)?(?:\\s*:)?(?:\\s+(?:ist|am|bis|zum))?)`, () => ({ k: 'deadlineMarker', strict: false }));
 
 // ---------- Regeln: Wiederholungen ----------
 
@@ -842,6 +844,15 @@ rule(
     return min > 0 && min <= 10080 ? { k: 'duration', min } : null;
   },
 );
+rule(PRIO_DURATION + 1, `(?<n>${NUM})\\s*(?<u>minuten|minute|min\\.?|stunden|stunde|std\\.?|h)\\s+lang`, (g) => {
+  const n = parseNumber(g.n);
+  const min = n ? Math.round(n * unitMinutes(g.u!)) : 0;
+  return min > 0 && min <= 10080 ? { k: 'duration', min } : null;
+});
+rule(PRIO_DURATION + 1, `(?:(?:für|dauert|dauer:?)\\s+(?<n>${NUM})\\s*(?:tage|tag)|(?<n2>${NUM})\\s*(?:tage|tag)\\s+lang)`, (g) => {
+  const n = parseNumber(g.n ?? g.n2!);
+  return n && n > 0 && n <= 7 ? { k: 'duration', min: Math.round(n * 1440) } : null;
+});
 rule(PRIO_PRIORITY, 'dringend|asap|schnellstmöglich|so\\s+schnell\\s+wie\\s+möglich|sehr\\s+wichtig|höchste\\s+priorität|hohe\\s+priorität|prio(?:rität)?\\s*(?<n>[1-4])|wichtig', (g, c, m) => {
   if (g.n) return { k: 'priority', p: Number(g.n) as 1 | 2 | 3 | 4 };
   if (/dringend|asap|schnellst|so\s+schnell|sehr|höchste|hoechste/.test(m[0])) return { k: 'priority', p: 1 };
@@ -1118,7 +1129,7 @@ export function parseTask(input: string, context: ParseContext): ParseResult {
           result.deadline = nx.p.date;
           nx.used = true;
           addSpan(cd.start, nx.end, 'deadline');
-        } else {
+        } else if (p.strict) {
           result.warnings.push('Nach „Deadline“ fehlt ein Datum');
         }
         break;

@@ -558,4 +558,25 @@ describe('Server', () => {
     expect(del.json.user.avatar).toBeNull();
     expect((await app.inject({ method: 'GET', url: up.json.user.avatar, headers: { cookie: anna.cookie } })).statusCode).toBe(404);
   });
+
+  it('Ansichten und eigene Filter werden in den Einstellungen gespeichert', async () => {
+    const id = uuidv7();
+    const ok = await anna.req<{ user: { settings: { views: Record<string, unknown>; filters: unknown[] } } }>('PATCH', '/api/me', {
+      settings: {
+        views: { [`project:${annaInbox}`]: { layout: 'board', group: 'priority' }, calendar: { cal: 'month' } },
+        filters: [{ id, name: 'Wichtig', query: '(heute | überfällig) & p1', color: '#e5484d' }],
+      },
+    });
+    expect(ok.status).toBe(200);
+    expect(ok.json.user.settings.views.calendar).toEqual({ cal: 'month' });
+    expect(ok.json.user.settings.filters).toHaveLength(1);
+    expect((await anna.req('PATCH', '/api/me', { settings: { views: { x: { layout: 'gantt' } } } })).status).toBe(400);
+    expect((await anna.req('PATCH', '/api/me', { settings: { filters: [{ id: 'kein-uuid', name: 'X', query: 'heute', color: null }] } })).status).toBe(400);
+    // Kalender-Abo enthält Deadlines
+    await anna.push([{ type: 'task', id: uuidv7(), data: { projectId: annaInbox, title: 'Abgabe Bericht', deadline: '2030-02-01', createdAt: 'x' } }]);
+    const { json } = await anna.req<{ url: string }>('POST', '/api/me/ical');
+    const ics = await new Client().req('GET', new URL(json.url).pathname);
+    expect(ics.text).toContain('SUMMARY:Deadline: Abgabe Bericht');
+    expect(ics.text).toContain('DTSTART;VALUE=DATE:20300201');
+  });
 });

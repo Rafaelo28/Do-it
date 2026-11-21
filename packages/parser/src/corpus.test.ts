@@ -162,7 +162,16 @@ const CASES: [string, Expect][] = [
 
   // --- Härtefälle ---
   ['übernächste Woche Montag Termin', { title: 'Termin', dueDate: '2026-11-30' }],
-  ['bis spätestens Freitag Bericht', { title: 'Bericht', dueDate: '2026-11-27' }],
+  ['bis spätestens Freitag Bericht', { title: 'Bericht', dueDate: null, deadline: '2026-11-27' }],
+  ['Bericht schreiben spätestens Freitag', { title: 'Bericht schreiben', dueDate: null, deadline: '2026-11-27' }],
+  ['morgen Bericht schreiben, spätestens Freitag', { title: 'Bericht schreiben', dueDate: '2026-11-21', deadline: '2026-11-27' }],
+  ['Bericht schreiben, Abgabe Freitag', { title: 'Bericht schreiben', deadline: '2026-11-27' }],
+  ['Präsentation Abgabetermin 3.12.', { title: 'Präsentation', deadline: '2026-12-03' }],
+  ['Abgabe vorbereiten', { title: 'Abgabe vorbereiten', deadline: null }],
+  ['Lernen 2 Stunden lang', { title: 'Lernen', durationMin: 120 }],
+  ['Umzug planen für 2 Tage', { title: 'Umzug planen', durationMin: 2880 }],
+  ['Messe 3 Tage lang ab Montag', { title: 'Messe', durationMin: 4320, dueDate: '2026-11-23' }],
+  ['in 2 Tagen Pakete abholen', { title: 'Pakete abholen', dueDate: '2026-11-22', durationMin: null }],
   ['in der Früh joggen', { title: 'Joggen', dueDate: '2026-11-21', dueTime: '08:00' }],
   ['Morgen um halb neun Arzt', { title: 'Arzt', dueDate: '2026-11-21', dueTime: '08:30' }],
   ['morgen Vormittag Handwerker', { title: 'Handwerker', dueDate: '2026-11-21', dueTime: '10:00' }],
@@ -286,6 +295,7 @@ describe('Parser-Details', () => {
   it('warnt bei Unverstandenem', () => {
     expect(parseTask('nach dem Urlaub Fotos sortieren', ctx).warnings.length).toBe(1);
     expect(parseTask('Deadline Bericht', ctx).warnings).toContain('Nach „Deadline“ fehlt ein Datum');
+    expect(parseTask('Abgabe vorbereiten', ctx).warnings).toEqual([]);
   });
 
   it('mehrere Zeilen werden mehrere Aufgaben', () => {

@@ -195,6 +195,12 @@ describe('Claude-Anbindung (OAuth + MCP)', () => {
 
     const found = textOf(await client.callTool({ name: 'find_tasks', arguments: { query: 'müll' } }));
     expect(found).toContain('Müll rausbringen');
+    // Filtersprache
+    const p1 = textOf(await client.callTool({ name: 'find_tasks', arguments: { filter: 'heute & p1' } }));
+    expect(p1).toContain('Zahnarzt anrufen');
+    expect(p1).not.toContain('Müll rausbringen');
+    expect(textOf(await client.callTool({ name: 'find_tasks', arguments: { filter: '#Gesundheit | wiederkehrend' } }))).toMatch(/2 Treffer/);
+    expect(textOf(await client.callTool({ name: 'find_tasks', arguments: { filter: 'heute &' } }))).toContain('Filter: Nach einer Verknüpfung fehlt noch etwas.');
 
     const upd = textOf(await client.callTool({ name: 'update_task', arguments: { id: zahnarztId, due: 'morgen 9 Uhr', priority: 2 } }));
     expect(upd).toContain('fällig Morgen 09:00');

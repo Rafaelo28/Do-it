@@ -6,18 +6,27 @@ import { useData } from '../lib/data';
 import type { Task } from '../lib/db';
 import { syncState } from '../lib/sync';
 import { useNow } from '../lib/time';
+import { useViewPref } from '../lib/views';
+import { LayoutSwitch } from '../components/LayoutSwitch';
+import { LayoutBody } from './Layouted';
 
 export function LabelView({ name }: { name: string }) {
   const { tasks } = useData();
+  const key = `label:${name.toLowerCase()}`;
+  const [pref, setPref] = useViewPref(key, { layout: 'list', group: 'project' });
+  const layout = pref.layout ?? 'list';
   const list = tasks.filter((t) => !t.completedAt && t.labels.some((l) => l.toLowerCase() === name.toLowerCase())).sort(byDue);
   return (
-    <div className="page">
+    <div className={`page ${layout !== 'list' ? 'wide' : ''}`}>
       <div className="page-head">
         <h1>@{name}</h1>
         <span className="sub">{list.length} offen</span>
+        <div className="actions">
+          <LayoutSwitch value={layout} onChange={(l) => setPref({ layout: l })} />
+        </div>
       </div>
       <QuickAdd placeholder={`Neue Aufgabe mit @${name}`} defaults={{ labels: [name] }} key={name} />
-      <TaskList tasks={list} />
+      <LayoutBody prefKey={key} pref={{ ...pref, layout }} setPref={setPref} tasks={list} groups={['project', 'priority', 'date']} list={<TaskList tasks={list} />} />
     </div>
   );
 }
@@ -57,15 +66,28 @@ export function FilterView({ name }: { name: string }) {
   const { me } = syncState.use();
   const now = useNow();
   const f = FILTERS[name];
+  const key = `filter:${name}`;
+  const [pref, setPref] = useViewPref(key, { layout: 'list', group: 'project' });
   if (!f || !me) return <div className="page"><div className="empty">Unbekannter Filter.</div></div>;
+  const layout = pref.layout ?? 'list';
   const list = tasks.filter((t) => !t.completedAt && f.match(t, { me: me.id, today: now.date })).sort(byDue);
   return (
-    <div className="page">
+    <div className={`page ${layout !== 'list' ? 'wide' : ''}`}>
       <div className="page-head">
         <h1>{f.title}</h1>
         <span className="sub">{list.length} offen</span>
+        <div className="actions">
+          <LayoutSwitch value={layout} onChange={(l) => setPref({ layout: l })} />
+        </div>
       </div>
-      {list.length ? <TaskList tasks={list} /> : <div className="empty">{f.empty}</div>}
+      <LayoutBody
+        prefKey={key}
+        pref={{ ...pref, layout }}
+        setPref={setPref}
+        tasks={list}
+        groups={['project', 'priority', 'date']}
+        list={list.length ? <TaskList tasks={list} /> : <div className="empty">{f.empty}</div>}
+      />
     </div>
   );
 }

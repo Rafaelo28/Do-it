@@ -8,6 +8,8 @@ import {
   formatDateLong,
   formatDateRelative,
   generateKeyBetween,
+  parseFilter,
+  type FilterContext,
   uuidv7,
   zonedParts,
   type Mutation,
@@ -50,6 +52,7 @@ interface ProjectRow {
 
 const INSTRUCTIONS = `Do-it ist die selbst gehostete Todo-App des Nutzers (Deutsch).
 - Für Zusammenfassungen und Tagesbriefings zuerst get_overview aufrufen, bei Bedarf get_completed für Erledigtes.
+- Gezielte Suchen mit find_tasks und "filter" in der Filtersprache, z. B. "(heute | überfällig) & p1" oder "deadline 7 tage".
 - Neue Aufgaben mit add_tasks anlegen. Das Feld "text" darf natürliche Sprache enthalten wie in der App, z. B. "morgen 15 Uhr Zahnarzt anrufen #Gesundheit !1" oder "jeden Montag Müll rausbringen +Ben". Do-it erkennt Datum, Uhrzeit, Wiederholung, Projekt (#), Label (@), Person (+) und Priorität (!1–!4) selbst.
 - IDs aus den Ergebnissen für complete_tasks, update_task, add_comment und delete_task verwenden.
 - Ein fertiges Briefing mit post_briefing speichern: Es erscheint in der App und als Benachrichtigung auf den Geräten des Nutzers.
@@ -247,8 +250,10 @@ function buildServer(deps: Deps, auth: BearerAuth): McpServer {
     'find_tasks',
     {
       title: 'Aufgaben suchen',
-      description: 'Aufgaben suchen und filtern (Text, Projekt, Label, Zeitraum, Status, Zuständigkeit).',
+      description:
+        'Aufgaben suchen und filtern (Text, Projekt, Label, Zeitraum, Status, Zuständigkeit). Für komplexe Abfragen "filter" in der Do-it-Filtersprache nutzen, z. B. "heute | überfällig", "#Arbeit & p1", "7 tage & !wiederkehrend", "deadline 14 tage", "mir zugewiesen".',
       inputSchema: {
+        filter: z.string().max(500).optional().describe('Abfrage in der Filtersprache (& und, | oder, ! nicht, Klammern; heute, morgen, überfällig, 7 tage, p1, #Projekt, @label, deadline …)'),
         query: z.string().max(200).optional().describe('Suchtext in Titel oder Beschreibung'),
         project: z.string().max(120).optional().describe('Projektname, z. B. "Haushalt" oder "Eingang"'),
         label: z.string().max(60).optional(),
@@ -266,6 +271,28 @@ function buildServer(deps: Deps, auth: BearerAuth): McpServer {
       let list = await visibleTasks(db, user.id);
       if (a.status === 'open') list = list.filter((t) => !t.data.completedAt);
       if (a.status === 'completed') list = list.filter((t) => t.data.completedAt);
+      if (a.filter) {
+        const parsed = parseFilter(a.filter);
+        if (!parsed.ok) return fail(`Filter: ${parsed.error}`);
+        const projects = await db.query<{ id: string; name: string; parent_id: string | null; is_inbox: boolean }>(
+          `SELECT o.id, o.data->>'name' AS name, o.data->>'parentId' AS parent_id, COALESCE((o.data->>'isInbox')::boolean, false) AS is_inbox
+           FROM project_members pm JOIN objects o ON o.id = pm.project_id AND o.type = 'project' AND NOT o.deleted WHERE pm.user_id = $1`,
+          [user.id],
+        );
+        const sections = await db.query<{ id: string; name: string }>(
+          `SELECT s.id, s.data->>'name' AS name FROM objects s JOIN project_members pm ON pm.project_id = s.project_id AND pm.user_id = $1
+           WHERE s.type = 'section' AND NOT s.deleted`,
+          [user.id],
+        );
+        const ctx: FilterContext = {
+          today,
+          meId: user.id,
+          projects: projects.map((p) => ({ id: p.id, name: p.name, parentId: p.parent_id, isInbox: p.is_inbox })),
+          sections,
+          members: [...names].map(([userId, name]) => ({ userId, name })),
+        };
+        list = list.filter((t) => parsed.filter.test(t.data, ctx));
+      }
       if (a.query) {
         const q = fold(a.query);
         list = list.filter((t) => fold(t.data.title).includes(q) || fold(t.data.description).includes(q));

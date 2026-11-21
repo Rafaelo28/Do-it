@@ -28,17 +28,32 @@ export function buildIcs(tasks: { id: string; data: TaskData }[], tz: string, ap
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Do-it//Aufgaben//DE', 'CALSCALE:GREGORIAN', 'X-WR-CALNAME:Do-it', 'METHOD:PUBLISH'];
   const origin = new URL(appUrl).origin;
   for (const { id, data: t } of tasks) {
-    if (!t.dueDate) continue;
-    lines.push('BEGIN:VEVENT', `UID:${id}@do-it`, `DTSTAMP:${now}`, `SUMMARY:${esc(t.title)}`, `URL:${origin}/task/${id}`);
-    if (t.dueTime) {
-      const start = zonedToUtc(t.dueDate, t.dueTime, tz);
-      const end = new Date(start.getTime() + (t.durationMin ?? 30) * 60_000);
-      lines.push(`DTSTART:${utcStamp(start)}`, `DTEND:${utcStamp(end)}`);
-    } else {
-      lines.push(`DTSTART;VALUE=DATE:${t.dueDate.replace(/-/g, '')}`, `DTEND;VALUE=DATE:${addDays(t.dueDate, 1).replace(/-/g, '')}`);
+    if (t.dueDate) {
+      lines.push('BEGIN:VEVENT', `UID:${id}@do-it`, `DTSTAMP:${now}`, `SUMMARY:${esc(t.title)}`, `URL:${origin}/task/${id}`);
+      if (t.dueTime) {
+        // mit Uhrzeit: die Dauer blockt die Zeit auch im fremden Kalender
+        const start = zonedToUtc(t.dueDate, t.dueTime, tz);
+        const end = new Date(start.getTime() + (t.durationMin ?? 30) * 60_000);
+        lines.push(`DTSTART:${utcStamp(start)}`, `DTEND:${utcStamp(end)}`, 'TRANSP:OPAQUE');
+      } else {
+        lines.push(`DTSTART;VALUE=DATE:${t.dueDate.replace(/-/g, '')}`, `DTEND;VALUE=DATE:${addDays(t.dueDate, 1).replace(/-/g, '')}`, 'TRANSP:TRANSPARENT');
+      }
+      if (t.description) lines.push(`DESCRIPTION:${esc(t.description.slice(0, 2000))}`);
+      lines.push('END:VEVENT');
     }
-    if (t.description) lines.push(`DESCRIPTION:${esc(t.description.slice(0, 2000))}`);
-    lines.push('END:VEVENT');
+    if (t.deadline) {
+      lines.push(
+        'BEGIN:VEVENT',
+        `UID:${id}-deadline@do-it`,
+        `DTSTAMP:${now}`,
+        `SUMMARY:${esc(`Deadline: ${t.title}`)}`,
+        `URL:${origin}/task/${id}`,
+        `DTSTART;VALUE=DATE:${t.deadline.replace(/-/g, '')}`,
+        `DTEND;VALUE=DATE:${addDays(t.deadline, 1).replace(/-/g, '')}`,
+        'TRANSP:TRANSPARENT',
+        'END:VEVENT',
+      );
+    }
   }
   lines.push('END:VCALENDAR');
   return lines.map(fold).join('\r\n') + '\r\n';

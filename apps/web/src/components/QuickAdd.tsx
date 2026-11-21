@@ -1,5 +1,5 @@
 import { parseMany, parseTask, type ParseContext, type ParseResult, type Span, type SpanType } from '@do-it/parser';
-import { type TaskData } from '@do-it/shared';
+import { type TaskData, timeToMinutes, minutesToTime } from '@do-it/shared';
 import { useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
 import { createTaskFromParse } from '../lib/actions';
 import { suggest, train } from '../lib/classifier';
@@ -75,6 +75,19 @@ export function QuickAdd(props: QuickAddProps) {
   const baseProject = props.projectId ?? inbox?.id ?? '';
   const effectiveProject = manualProject ?? result.projectId ?? baseProject;
   const memberName = (id: string | null) => members.find((m) => m.userId === id)?.name ?? '?';
+  // Zeit geblockt? Überschneidung mit einem anderen Termin am selben Tag
+  const clash = useMemo(() => {
+    if (!result.dueDate || !result.dueTime) return null;
+    const start = timeToMinutes(result.dueTime);
+    const end = start + (result.durationMin ?? 30);
+    return (
+      tasks.find((t) => {
+        if (t.completedAt || t.dueDate !== result.dueDate || !t.dueTime || (t.assigneeId && t.assigneeId !== me?.id)) return false;
+        const s = timeToMinutes(t.dueTime);
+        return s < end && start < s + (t.durationMin ?? 30);
+      }) ?? null
+    );
+  }, [tasks, result.dueDate, result.dueTime, result.durationMin, me]);
 
   function ignoreSpans(types: SpanType[]) {
     const texts = result.spans.filter((s) => types.includes(s.type)).map((s) => s.text.trim().toLowerCase());
@@ -288,6 +301,12 @@ export function QuickAdd(props: QuickAddProps) {
               <IconWarn size={14} /> {w}
             </span>
           ))}
+          {clash && (
+            <span className="chip warn" title="Die Zeit ist schon durch einen anderen Termin belegt">
+              <IconWarn size={14} /> Überschneidet sich mit „{clash.title}“ ({clash.dueTime}
+              {clash.durationMin ? `–${minutesToTime(Math.min(1439, timeToMinutes(clash.dueTime!) + clash.durationMin))}` : ''})
+            </span>
+          )}
         </div>
       )}
 

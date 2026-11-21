@@ -487,7 +487,8 @@ export async function buildApp({ config, db, pushTransport, logger = false }: Ap
     if (!user) throw new HttpError(404, 'Unbekannter Kalender');
     const tasks = await db.query<{ id: string; data: TaskData }>(
       `SELECT t.id, t.data FROM objects t JOIN project_members pm ON pm.project_id = t.project_id AND pm.user_id = $1
-       WHERE t.type = 'task' AND NOT t.deleted AND t.data->>'completedAt' IS NULL AND t.data->>'dueDate' IS NOT NULL
+       WHERE t.type = 'task' AND NOT t.deleted AND t.data->>'completedAt' IS NULL
+         AND (t.data->>'dueDate' IS NOT NULL OR t.data->>'deadline' IS NOT NULL)
          AND (t.data->>'assigneeId' IS NULL OR t.data->>'assigneeId' = $1::text)`,
       [user.id],
     );
