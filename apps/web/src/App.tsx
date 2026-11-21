@@ -15,6 +15,7 @@ import { AuthView } from './views/Auth';
 import { BriefingsView } from './views/Briefings';
 import { DoneView } from './views/Done';
 import { KarmaView } from './views/Karma';
+import { CustomFilterView } from './views/CustomFilter';
 import { startKarmaUpdates } from './lib/karma';
 import { FilterView, LabelView, SearchView } from './views/Lists';
 import { ProjectView } from './views/ProjectView';
@@ -22,6 +23,7 @@ import { TaskDetail } from './views/TaskDetail';
 import { TodayView, UpcomingView } from './views/Today';
 
 const SettingsView = lazy(() => import('./views/Settings').then((m) => ({ default: m.SettingsView })));
+const CalendarPage = lazy(() => import('./views/CalendarPage').then((m) => ({ default: m.CalendarPage })));
 
 type Phase = 'loading' | 'setup' | 'login' | 'ready';
 
@@ -155,6 +157,12 @@ function Shell() {
           <Route path="/briefings" component={BriefingsView} />
           <Route path="/done" component={DoneView} />
           <Route path="/karma" component={KarmaView} />
+          <Route path="/calendar">
+            <Suspense fallback={<div className="page muted">Lade …</div>}>
+              <CalendarPage />
+            </Suspense>
+          </Route>
+          <Route path="/f/:id">{(p) => <CustomFilterView id={p.id} key={p.id} />}</Route>
           <Route path="/filter/:name">{(p) => <FilterView name={p.name} />}</Route>
           <Route path="/invite/:token">{(p) => <InviteAccept token={p.token} />}</Route>
           <Route path="/share">

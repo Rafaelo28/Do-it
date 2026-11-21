@@ -4,7 +4,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
 import { Avatar } from '../components/Avatar';
-import { IconBack, IconBell, IconCheck, IconTrash, IconX } from '../components/Icons';
+import { IconBack, IconBell, IconCalendar, IconCheck, IconTrash, IconX } from '../components/Icons';
 import { QuickAdd } from '../components/QuickAdd';
 import { TaskList } from '../components/TaskList';
 import { PRIORITY_COLOR, reminderLabel } from '../components/ui';
@@ -98,21 +98,38 @@ function Detail({ task }: { task: Task }) {
           <IconBack /> Zurück
         </button>
         <span className="muted small">
+          {task.isEvent ? 'Termin · ' : ''}
           {project?.isInbox ? 'Eingang' : project?.name}
           {task.parentId && ' · Unteraufgabe'}
         </span>
+        {!readOnly && !task.parentId && (
+          <label className="row small muted" style={{ marginLeft: 'auto', gap: 6 }}>
+            <EventSwitch
+              value={!!task.isEvent}
+              disabled={!task.isEvent && !task.dueDate}
+              onChange={(on) => set(on ? { isEvent: true, priority: 4, completedAt: null, completedBy: null } : { isEvent: false })}
+            />
+            Termin (kein To-do)
+          </label>
+        )}
       </div>
 
       <div className="row" style={{ alignItems: 'flex-start', flexWrap: 'nowrap' }}>
-        <button
-          className={`check ${task.completedAt ? 'done' : ''}`}
-          style={{ '--pc': PRIORITY_COLOR[task.priority], marginTop: 6 } as React.CSSProperties}
-          aria-label="Erledigt"
-          disabled={readOnly}
-          onClick={() => me && void toggleTask(task, me)}
-        >
-          <IconCheck size={13} />
-        </button>
+        {task.isEvent ? (
+          <span className="event-mark" style={{ marginTop: 8 }} title="Termin">
+            <IconCalendar size={16} />
+          </span>
+        ) : (
+          <button
+            className={`check ${task.completedAt ? 'done' : ''}`}
+            style={{ '--pc': PRIORITY_COLOR[task.priority], marginTop: 6 } as React.CSSProperties}
+            aria-label="Erledigt"
+            disabled={readOnly}
+            onClick={() => me && void toggleTask(task, me)}
+          >
+            <IconCheck size={13} />
+          </button>
+        )}
         <input
           className="detail-title"
           value={title}
@@ -224,6 +241,7 @@ function Detail({ task }: { task: Task }) {
           </select>
         </label>
 
+        {!task.isEvent && (
         <label className="field">
           <span>Priorität</span>
           <select className="input" value={task.priority} disabled={readOnly} onChange={(e) => set({ priority: Number(e.target.value) as 1 | 2 | 3 | 4 })}>
@@ -233,6 +251,7 @@ function Detail({ task }: { task: Task }) {
             <option value={4}>Keine</option>
           </select>
         </label>
+        )}
 
         <label className="field">
           <span>Zuständig</span>
@@ -256,10 +275,12 @@ function Detail({ task }: { task: Task }) {
           )}
         </label>
 
-        <label className="field">
-          <span>Deadline</span>
-          <input className="input" type="date" value={task.deadline ?? ''} disabled={readOnly} onChange={(e) => set({ deadline: e.target.value || null })} />
-        </label>
+        {!task.isEvent && (
+          <label className="field">
+            <span>Deadline</span>
+            <input className="input" type="date" value={task.deadline ?? ''} disabled={readOnly} onChange={(e) => set({ deadline: e.target.value || null })} />
+          </label>
+        )}
 
         <label className="field">
           <span>Dauer (Minuten)</span>
@@ -391,5 +412,23 @@ function Detail({ task }: { task: Task }) {
         </span>
       </div>
     </div>
+  );
+}
+
+/** Schalter mit sofortiger Rückmeldung (gespeichert wird im Hintergrund) */
+function EventSwitch({ value, disabled, onChange }: { value: boolean; disabled: boolean; onChange: (on: boolean) => void }) {
+  const [on, setOn] = useState(value);
+  useEffect(() => setOn(value), [value]);
+  return (
+    <input
+      type="checkbox"
+      checked={on}
+      disabled={disabled}
+      title={disabled ? 'Ein Termin braucht ein Datum' : undefined}
+      onChange={(e) => {
+        setOn(e.target.checked);
+        onChange(e.target.checked);
+      }}
+    />
   );
 }

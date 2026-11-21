@@ -60,6 +60,8 @@ export const taskSchema = z.strictObject({
   sortKey: z.string().max(100),
   createdBy: idSchema.nullable(),
   createdAt: isoSchema,
+  /** Termin statt To-do: steht im Kalender, wird nicht abgehakt */
+  isEvent: z.boolean().optional(),
 });
 
 export const labelSchema = z.strictObject({
@@ -108,6 +110,26 @@ export const settingsSchema = z.strictObject({
   weeklyGoal: z.number().int().min(1).max(700),
   daysOff: z.array(weekday).max(6),
   vacations: z.array(z.strictObject({ from: dateSchema, to: dateSchema.nullable() })).max(24),
+  views: z
+    .record(
+      z.string().max(140),
+      z.strictObject({
+        layout: z.enum(['list', 'board', 'calendar', 'table']).optional(),
+        group: z.enum(['section', 'project', 'priority', 'date']).optional(),
+        cal: z.enum(['day', 'week', 'month']).optional(),
+      }),
+    )
+    .refine((v) => Object.keys(v).length <= 500, 'Zu viele gespeicherte Ansichten'),
+  filters: z
+    .array(
+      z.strictObject({
+        id: idSchema,
+        name: z.string().trim().min(1).max(60),
+        query: z.string().trim().min(1).max(500),
+        color: z.string().max(20).nullable(),
+      }),
+    )
+    .max(150),
 });
 
 export const mutationSchema = z.strictObject({

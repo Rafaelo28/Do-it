@@ -140,6 +140,45 @@ export const IconLeaf = (p: P) => (
     <path d="M5 19l7-7" />
   </Svg>
 );
+export const IconList = (p: P) => (
+  <Svg {...p}>
+    <path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01" />
+  </Svg>
+);
+export const IconBoard = (p: P) => (
+  <Svg {...p}>
+    <rect x="3" y="4" width="5" height="16" rx="1.5" />
+    <rect x="10" y="4" width="5" height="11" rx="1.5" />
+    <rect x="17" y="4" width="4" height="7" rx="1.5" />
+  </Svg>
+);
+export const IconTable = (p: P) => (
+  <Svg {...p}>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M3 9.5h18M3 15h18M9 4v16" />
+  </Svg>
+);
+export const IconChevronLeft = (p: P) => (
+  <Svg {...p}>
+    <path d="M15 5l-7 7 7 7" />
+  </Svg>
+);
+export const IconChevronRight = (p: P) => (
+  <Svg {...p}>
+    <path d="M9 5l7 7-7 7" />
+  </Svg>
+);
+export const IconFilter = (p: P) => (
+  <Svg {...p}>
+    <path d="M4 5h16l-6 7.5V19l-4-2v-4.5z" />
+  </Svg>
+);
+export const IconPencil = (p: P) => (
+  <Svg {...p}>
+    <path d="M4 20h4L19 9l-4-4L4 16z" />
+    <path d="M13.5 6.5l4 4" />
+  </Svg>
+);
 export const IconX = (p: P) => (
   <Svg {...p}>
     <path d="M18 6L6 18M6 6l12 12" />

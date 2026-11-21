@@ -7,7 +7,7 @@ import type { Task } from '../lib/db';
 import { dragState, startDrag } from '../lib/dnd';
 import { syncState } from '../lib/sync';
 import { useNow } from '../lib/time';
-import { IconBell, IconCheck, IconClock, IconFlag, IconGrip, IconHash, IconRepeat, IconSubtasks, IconTag } from './Icons';
+import { IconBell, IconCheck, IconClock, IconFlag, IconGrip, IconHash, IconRepeat, IconSubtasks, IconTag, IconCalendar } from './Icons';
 import { Avatar } from './Avatar';
 import { dueLabel, durationLabel, PRIORITY_COLOR } from './ui';
 
@@ -48,6 +48,7 @@ function sameTask(a: Task, b: Task): boolean {
       a.dueTime === b.dueTime &&
       a.deadline === b.deadline &&
       a.durationMin === b.durationMin &&
+      a.isEvent === b.isEvent &&
       a.priority === b.priority &&
       a.assigneeId === b.assigneeId &&
       a.projectId === b.projectId &&
@@ -91,17 +92,23 @@ const TaskRow = memo(
             <IconGrip size={16} />
           </span>
         )}
-        <button
-          className={`check ${task.completedAt ? 'done' : ''}`}
-          style={{ '--pc': PRIORITY_COLOR[task.priority] } as React.CSSProperties}
-          aria-label={task.completedAt ? 'Als offen markieren' : 'Erledigt'}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (me) void toggleTask(task, me);
-          }}
-        >
-          <IconCheck size={13} />
-        </button>
+        {task.isEvent ? (
+          <span className="event-mark" title="Termin" aria-label="Termin">
+            <IconCalendar size={14} />
+          </span>
+        ) : (
+          <button
+            className={`check ${task.completedAt ? 'done' : ''}`}
+            style={{ '--pc': PRIORITY_COLOR[task.priority] } as React.CSSProperties}
+            aria-label={task.completedAt ? 'Als offen markieren' : 'Erledigt'}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (me) void toggleTask(task, me);
+            }}
+          >
+            <IconCheck size={13} />
+          </button>
+        )}
         <div className="task-body">
           <div className="task-title">{task.title}</div>
           <div className="meta">

@@ -47,3 +47,27 @@ describe('Karma', () => {
     expect(karmaStreak(new Map(), '2026-11-22', prefs, null)).toEqual({ current: 0, best: 0 });
   });
 });
+
+import { occurrencesBetween, toRRule } from './recurrence';
+
+describe('Termine: Wiederholungen', () => {
+  it('liefert alle Termine im Zeitraum', () => {
+    expect(occurrencesBetween('2026-11-23', { freq: 'week', interval: 1, weekdays: [1, 4] }, '2026-11-20', '2026-12-04')).toEqual([
+      '2026-11-23',
+      '2026-11-26',
+      '2026-11-30',
+      '2026-12-03',
+    ]);
+    expect(occurrencesBetween('2026-10-31', { freq: 'month', interval: 1, monthDay: -1 }, '2026-11-15', '2027-01-31')).toEqual(['2026-11-30', '2026-12-31', '2027-01-31']);
+    expect(occurrencesBetween('2026-11-23', null, '2026-11-20', '2026-11-30')).toEqual(['2026-11-23']);
+    expect(occurrencesBetween('2026-11-23', { freq: 'day', interval: 1, afterCompletion: true }, '2026-11-20', '2026-11-30')).toEqual(['2026-11-23']);
+  });
+
+  it('übersetzt Wiederholungen ins Kalender-Abo (RRULE)', () => {
+    expect(toRRule({ freq: 'week', interval: 2, weekdays: [1, 4] })).toBe('FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,TH');
+    expect(toRRule({ freq: 'month', interval: 1, nthWeekday: { n: -1, weekday: 5 } })).toBe('FREQ=MONTHLY;BYDAY=-1FR');
+    expect(toRRule({ freq: 'year', interval: 1, month: 12, monthDay: 24 })).toBe('FREQ=YEARLY;BYMONTHDAY=24;BYMONTH=12');
+    expect(toRRule({ freq: 'day', interval: 1, until: '2026-12-31' })).toBe('FREQ=DAILY;UNTIL=20261231');
+    expect(toRRule({ freq: 'day', interval: 3, afterCompletion: true })).toBeNull();
+  });
+});

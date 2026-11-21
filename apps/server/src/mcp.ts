@@ -8,6 +8,9 @@ import {
   formatDateLong,
   formatDateRelative,
   generateKeyBetween,
+  occurrencesBetween,
+  parseFilter,
+  type FilterContext,
   uuidv7,
   zonedParts,
   type Mutation,
@@ -50,6 +53,8 @@ interface ProjectRow {
 
 const INSTRUCTIONS = `Do-it ist die selbst gehostete Todo-App des Nutzers (Deutsch).
 - Für Zusammenfassungen und Tagesbriefings zuerst get_overview aufrufen, bei Bedarf get_completed für Erledigtes.
+- Gezielte Suchen mit find_tasks und "filter" in der Filtersprache, z. B. "(heute | überfällig) & p1" oder "deadline 7 tage".
+- Termine (Arzt, Treffen …) mit add_tasks und "event": true eintragen; sie stehen im Kalender und werden nicht abgehakt.
 - Neue Aufgaben mit add_tasks anlegen. Das Feld "text" darf natürliche Sprache enthalten wie in der App, z. B. "morgen 15 Uhr Zahnarzt anrufen #Gesundheit !1" oder "jeden Montag Müll rausbringen +Ben". Do-it erkennt Datum, Uhrzeit, Wiederholung, Projekt (#), Label (@), Person (+) und Priorität (!1–!4) selbst.
 - IDs aus den Ergebnissen für complete_tasks, update_task, add_comment und delete_task verwenden.
 - Ein fertiges Briefing mit post_briefing speichern: Es erscheint in der App und als Benachrichtigung auf den Geräten des Nutzers.
@@ -131,7 +136,7 @@ async function memberNames(db: Db, userId: string): Promise<Map<string, string>>
 
 function line(t: TaskRow, today: string, names: Map<string, string>, opts: { project?: boolean } = {}): string {
   const d = t.data;
-  const parts = [d.completedAt ? `[erledigt] ${d.title}` : d.title];
+  const parts = [d.isEvent ? `[Termin] ${d.title}` : d.completedAt ? `[erledigt] ${d.title}` : d.title];
   if (d.dueDate) parts.push(`fällig ${formatDateRelative(d.dueDate, today)}${d.dueTime ? ` ${d.dueTime}` : ''}`);
   if (d.recurrence) parts.push(describeRecurrence(d.recurrence));
   if (d.deadline) parts.push(`Deadline ${formatDateRelative(d.deadline, today)}`);
@@ -202,7 +207,12 @@ function buildServer(deps: Deps, auth: BearerAuth): McpServer {
       const until = addDays(today, days);
       const names = await memberNames(db, user.id);
       const open = await visibleTasks(db, user.id, `t.data->>'completedAt' IS NULL`);
-      const mine = open.filter((t) => !t.data.assigneeId || t.data.assigneeId === user.id);
+      const mineAll = open.filter((t) => !t.data.assigneeId || t.data.assigneeId === user.id);
+      const mine = mineAll.filter((t) => !t.data.isEvent);
+      const agenda = mineAll
+        .filter((t) => t.data.isEvent && t.data.dueDate)
+        .flatMap((t) => occurrencesBetween(t.data.dueDate!, t.data.recurrence, today, until).map((date) => ({ t, date })))
+        .sort((a, b) => (a.date + (a.t.data.dueTime ?? '')).localeCompare(b.date + (b.t.data.dueTime ?? '')));
       const overdue = mine.filter((t) => t.data.dueDate && t.data.dueDate < today);
       const todays = mine.filter((t) => t.data.dueDate === today);
       const upcoming = mine.filter((t) => t.data.dueDate && t.data.dueDate > today && t.data.dueDate <= until);
@@ -219,6 +229,15 @@ function buildServer(deps: Deps, auth: BearerAuth): McpServer {
         out.push(`\n## ${title} (${list.length})`);
         out.push(list.length ? list.slice(0, 60).map((t) => line(t, today, names)).join('\n') : '- nichts');
       };
+      out.push(`\n## Termine (${agenda.length})`);
+      out.push(
+        agenda.length
+          ? agenda
+              .slice(0, 60)
+              .map(({ t, date }) => `- ${formatDateRelative(date, today)}${t.data.dueTime ? ` ${t.data.dueTime}` : ''}${t.data.durationMin ? ` (${t.data.durationMin} min)` : ''}: ${t.data.title} (id: ${t.id})`)
+              .join('\n')
+          : '- keine',
+      );
       section('Überfällig', overdue);
       section('Heute', todays);
       section(`Nächste ${days} Tage`, upcoming);
@@ -247,8 +266,10 @@ function buildServer(deps: Deps, auth: BearerAuth): McpServer {
     'find_tasks',
     {
       title: 'Aufgaben suchen',
-      description: 'Aufgaben suchen und filtern (Text, Projekt, Label, Zeitraum, Status, Zuständigkeit).',
+      description:
+        'Aufgaben suchen und filtern (Text, Projekt, Label, Zeitraum, Status, Zuständigkeit). Für komplexe Abfragen "filter" in der Do-it-Filtersprache nutzen, z. B. "heute | überfällig", "#Arbeit & p1", "7 tage & !wiederkehrend", "deadline 14 tage", "mir zugewiesen".',
       inputSchema: {
+        filter: z.string().max(500).optional().describe('Abfrage in der Filtersprache (& und, | oder, ! nicht, Klammern; heute, morgen, überfällig, 7 tage, p1, #Projekt, @label, deadline …)'),
         query: z.string().max(200).optional().describe('Suchtext in Titel oder Beschreibung'),
         project: z.string().max(120).optional().describe('Projektname, z. B. "Haushalt" oder "Eingang"'),
         label: z.string().max(60).optional(),
@@ -266,6 +287,28 @@ function buildServer(deps: Deps, auth: BearerAuth): McpServer {
       let list = await visibleTasks(db, user.id);
       if (a.status === 'open') list = list.filter((t) => !t.data.completedAt);
       if (a.status === 'completed') list = list.filter((t) => t.data.completedAt);
+      if (a.filter) {
+        const parsed = parseFilter(a.filter);
+        if (!parsed.ok) return fail(`Filter: ${parsed.error}`);
+        const projects = await db.query<{ id: string; name: string; parent_id: string | null; is_inbox: boolean }>(
+          `SELECT o.id, o.data->>'name' AS name, o.data->>'parentId' AS parent_id, COALESCE((o.data->>'isInbox')::boolean, false) AS is_inbox
+           FROM project_members pm JOIN objects o ON o.id = pm.project_id AND o.type = 'project' AND NOT o.deleted WHERE pm.user_id = $1`,
+          [user.id],
+        );
+        const sections = await db.query<{ id: string; name: string }>(
+          `SELECT s.id, s.data->>'name' AS name FROM objects s JOIN project_members pm ON pm.project_id = s.project_id AND pm.user_id = $1
+           WHERE s.type = 'section' AND NOT s.deleted`,
+          [user.id],
+        );
+        const ctx: FilterContext = {
+          today,
+          meId: user.id,
+          projects: projects.map((p) => ({ id: p.id, name: p.name, parentId: p.parent_id, isInbox: p.is_inbox })),
+          sections,
+          members: [...names].map(([userId, name]) => ({ userId, name })),
+        };
+        list = list.filter((t) => parsed.filter.test(t.data, ctx));
+      }
       if (a.query) {
         const q = fold(a.query);
         list = list.filter((t) => fold(t.data.title).includes(q) || fold(t.data.description).includes(q));
@@ -331,6 +374,7 @@ function buildServer(deps: Deps, auth: BearerAuth): McpServer {
               description: z.string().max(5000).optional(),
               project: z.string().max(120).optional().describe('Projektname; überschreibt #Projekt im Text'),
               parent_id: z.string().uuid().optional().describe('ID einer Hauptaufgabe für Unteraufgaben'),
+              event: z.boolean().optional().describe('true: als Termin im Kalender eintragen (kein To-do, wird nicht abgehakt); braucht ein Datum'),
             }),
           )
           .min(1)
@@ -347,6 +391,10 @@ function buildServer(deps: Deps, auth: BearerAuth): McpServer {
         const r = parseTask(item.text, ctx);
         if (!r.title) {
           results.push(`- „${item.text}“: kein Titel erkannt`);
+          continue;
+        }
+        if (item.event && !r.dueDate) {
+          results.push(`- „${r.title}“: Ein Termin braucht ein Datum`);
           continue;
         }
         const changes: Omit<Mutation, 'mid' | 'hlc'>[] = [];
@@ -408,6 +456,7 @@ function buildServer(deps: Deps, auth: BearerAuth): McpServer {
             labels: r.labels,
             sortKey: generateKeyBetween(last?.k ?? null, null),
             createdAt: new Date().toISOString(),
+            ...(item.event ? { isEvent: true, priority: 4 } : {}),
           },
         });
         const reminders = [...r.reminders];
@@ -462,6 +511,10 @@ function buildServer(deps: Deps, auth: BearerAuth): McpServer {
         }
         if (t.data.completedAt) {
           out.push(`- „${t.data.title}“ war schon erledigt`);
+          continue;
+        }
+        if (t.data.isEvent) {
+          out.push(`- „${t.data.title}“ ist ein Termin und wird nicht abgehakt`);
           continue;
         }
         const changes = completeTaskChanges(t.data, today, user.id, new Date().toISOString());

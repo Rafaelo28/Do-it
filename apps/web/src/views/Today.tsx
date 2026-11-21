@@ -1,4 +1,6 @@
-import { IconSun } from '../components/Icons';
+import { IconFlag, IconSun } from '../components/Icons';
+import { AgendaList, useEvents } from '../components/Agenda';
+import { Link } from 'wouter';
 import { addDays, formatDateLong, formatDateRelative } from '@do-it/shared';
 import { useState } from 'react';
 import { QuickAdd } from '../components/QuickAdd';
@@ -16,9 +18,14 @@ export function TodayView() {
   const now = useNow();
   const [showDone, setShowDone] = useState(false);
   const mine = (t: (typeof tasks)[number]) => !t.assigneeId || t.assigneeId === me?.id;
-  const open = tasks.filter((t) => !t.completedAt && t.dueDate && mine(t));
+  const open = tasks.filter((t) => !t.completedAt && !t.isEvent && t.dueDate && mine(t));
+  const agenda = useEvents(now.date, now.date);
   const overdue = open.filter((t) => t.dueDate! < now.date).sort(byDue);
   const today = open.filter((t) => t.dueDate === now.date).sort(byDue);
+  // Deadlines heute oder überschritten, die nicht ohnehin schon oben stehen
+  const deadlines = tasks
+    .filter((t) => !t.completedAt && !t.isEvent && mine(t) && t.deadline && t.deadline <= now.date && !(t.dueDate && t.dueDate <= now.date))
+    .sort((a, b) => (a.deadline! < b.deadline! ? -1 : 1));
   const doneToday = tasks.filter((t) => {
     const at = t.completedAt ?? t.lastCompletedAt;
     return !!at && localDateOf(at) === now.date && mine(t);
@@ -31,6 +38,14 @@ export function TodayView() {
         <span className="sub">{formatDateLong(now.date)}</span>
       </div>
       <BriefingCard />
+      {agenda.length > 0 && (
+        <section className="today-agenda">
+          <div className="group-head">
+            Termine heute <span className="muted">{agenda.length}</span>
+          </div>
+          <AgendaList items={agenda} />
+        </section>
+      )}
       <QuickAdd defaults={{ dueDate: now.date }} placeholder="Aufgabe für heute – oder einfach „morgen 9 Uhr …“" />
       {overdue.length > 0 && (
         <>
@@ -51,6 +66,14 @@ export function TodayView() {
             </button>
           </div>
           <TaskList tasks={overdue} />
+        </>
+      )}
+      {deadlines.length > 0 && (
+        <>
+          <div className="group-head" style={{ color: 'var(--danger)' }}>
+            Deadline heute oder überschritten <span className="muted">{deadlines.length}</span>
+          </div>
+          <TaskList tasks={deadlines} />
         </>
       )}
       <div className="group-head">
@@ -83,8 +106,9 @@ export function UpcomingView() {
   const { me } = syncState.use();
   const now = useNow();
   const mine = (t: (typeof tasks)[number]) => !t.assigneeId || t.assigneeId === me?.id;
-  const open = tasks.filter((t) => !t.completedAt && t.dueDate && mine(t)).sort(byDue);
+  const open = tasks.filter((t) => !t.completedAt && !t.isEvent && t.dueDate && mine(t)).sort(byDue);
   const days = Array.from({ length: 14 }, (_, i) => addDays(now.date, i));
+  const events = useEvents(days[0]!, days[days.length - 1]!);
   const later = open.filter((t) => t.dueDate! > days[days.length - 1]!);
   const overdue = open.filter((t) => t.dueDate! < now.date);
 
@@ -103,6 +127,8 @@ export function UpcomingView() {
       )}
       {days.map((d) => {
         const list = open.filter((t) => t.dueDate === d);
+        const dls = tasks.filter((t) => !t.completedAt && !t.isEvent && mine(t) && t.deadline === d && t.dueDate !== d);
+        const dayEvents = events.filter((e) => e.date === d);
         const rel = formatDateRelative(d, now.date);
         return (
           <section key={d}>
@@ -110,6 +136,13 @@ export function UpcomingView() {
               {['Heute', 'Morgen', 'Übermorgen'].includes(rel) ? `${rel} · ${formatDateLong(d)}` : formatDateLong(d)}
               <span className="muted">{list.length || ''}</span>
             </div>
+            {dayEvents.length > 0 && <AgendaList items={dayEvents} />}
+            {dls.map((t) => (
+              <Link key={t.id} href={`/task/${t.id}`} className="deadline-line">
+                <IconFlag size={13} /> Deadline: {t.title}
+                {t.dueDate && <span className="muted"> · geplant {formatDateRelative(t.dueDate, now.date)}</span>}
+              </Link>
+            ))}
             {list.length > 0 && <TaskList tasks={list} />}
             <DayAdd date={d} />
           </section>

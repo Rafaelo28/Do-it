@@ -11,6 +11,12 @@ import { dragState, type DragState } from '../lib/dnd';
 import type { Project } from '../lib/db';
 import { toast } from '../lib/store';
 import { sync, syncState } from '../lib/sync';
+import { useViewPref } from '../lib/views';
+import { useNow } from '../lib/time';
+import { addDays, formatDateRelative } from '@do-it/shared';
+import { AgendaList, useEvents } from '../components/Agenda';
+import { LayoutSwitch } from '../components/LayoutSwitch';
+import { LayoutBody } from './Layouted';
 
 const COLORS = ['#0f8b6c', '#3e63dd', '#e5484d', '#f76b15', '#8e4ec6', '#12a594', '#d6409f', '#978365', '#5b5bd6', '#30a46c'];
 
@@ -23,10 +29,15 @@ export function ProjectView({ id }: { id: string }) {
   const [newSection, setNewSection] = useState<string | null>(null);
   const [addIn, setAddIn] = useState<string | null>(null);
   const drag = dragState.use();
+  const [pref, setPref] = useViewPref(`project:${id}`, { layout: 'list', group: 'section' });
+  const today = useNow().date;
+  const upcomingEvents = useEvents(today, addDays(today, 60), (t) => t.projectId === id);
+  const nextEvents = upcomingEvents.filter((e, i) => upcomingEvents.findIndex((x) => x.task.id === e.task.id) === i).slice(0, 8);
+  const layout = pref.layout ?? 'list';
 
   if (!project) return <div className="page">{loaded && <div className="empty">Projekt nicht gefunden.</div>}</div>;
 
-  const projectTasks = tasks.filter((t) => t.projectId === id && (showDone || !t.completedAt));
+  const projectTasks = tasks.filter((t) => t.projectId === id && !t.isEvent && (showDone || !t.completedAt));
   const projectSections = sections.filter((s) => s.projectId === id);
   const unsectioned = projectTasks.filter((t) => !t.sectionId || !projectSections.some((s) => s.id === t.sectionId));
   const projectMembers = members.filter((m) => m.projectId === id);
@@ -34,7 +45,7 @@ export function ProjectView({ id }: { id: string }) {
   const doneCount = tasks.filter((t) => t.projectId === id && t.completedAt).length;
 
   return (
-    <div className="page">
+    <div className={`page ${layout !== 'list' ? 'wide' : ''}`}>
       <div className="page-head">
         {!project.isInbox && <span className="dot" style={{ background: project.color ?? 'var(--accent)', width: 14, height: 14 }} />}
         <h1>{project.name}</h1>
@@ -44,6 +55,7 @@ export function ProjectView({ id }: { id: string }) {
           </span>
         )}
         <div className="actions">
+          <LayoutSwitch value={layout} onChange={(l) => setPref({ layout: l })} />
           {!project.isInbox && (
             <button className="icon-btn" aria-label="Projekt-Einstellungen" onClick={() => setSettings(true)}>
               <IconSettings />
@@ -54,6 +66,29 @@ export function ProjectView({ id }: { id: string }) {
 
       {myRole !== 'viewer' && <QuickAdd projectId={id} key={id} />}
 
+      {layout !== 'list' && (
+        <LayoutBody
+          prefKey={`project:${id}`}
+          pref={{ ...pref, layout }}
+          setPref={setPref}
+          tasks={tasks.filter((t) => t.projectId === id && !t.completedAt)}
+          groups={['section', 'priority', 'date']}
+          projectId={id}
+          showProject={false}
+          list={null}
+        />
+      )}
+
+      {layout === 'list' && (
+      <>
+      {nextEvents.length > 0 && (
+        <section>
+          <div className="group-head">
+            Nächste Termine <span className="muted">{nextEvents.length}</span>
+          </div>
+          <AgendaList items={nextEvents} showDate={(d) => formatDateRelative(d, today)} />
+        </section>
+      )}
       <div data-drop-section="" className={dropZoneClass(drag, '')}>
         <TaskList tasks={unsectioned} showProject={false} sortable={myRole !== 'viewer'} />
       </div>
@@ -109,6 +144,8 @@ export function ProjectView({ id }: { id: string }) {
           </button>
         )}
       </div>
+      </>
+      )}
 
       {settings && <ProjectSettings project={project} role={myRole} onClose={() => setSettings(false)} />}
     </div>

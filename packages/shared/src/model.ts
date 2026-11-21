@@ -56,6 +56,25 @@ export const OBJECT_DEFAULTS: { [K in ObjectType]: Partial<ObjectDataMap[K]> } =
 /** Objekte, die nur ihrem Besitzer gehören (nicht mit dem Projekt geteilt). */
 export const PRIVATE_TYPES: ReadonlySet<ObjectType> = new Set(['label', 'reminder']);
 
+export type ViewLayout = 'list' | 'board' | 'calendar' | 'table';
+export type BoardGroup = 'section' | 'project' | 'priority' | 'date';
+export type CalendarMode = 'day' | 'week' | 'month';
+
+/** Darstellung einer Ansicht (Projekt, Label, Filter, Kalender) – pro Person gespeichert */
+export interface ViewPref {
+  layout?: ViewLayout;
+  group?: BoardGroup;
+  cal?: CalendarMode;
+}
+
+/** Eigener Filter mit Abfrage in der Filtersprache */
+export interface SavedFilter {
+  id: string;
+  name: string;
+  query: string;
+  color: string | null;
+}
+
 export interface UserSettings {
   morningTime: string;
   noonTime: string;
@@ -77,6 +96,10 @@ export interface UserSettings {
   daysOff: number[];
   /** Urlaub (unterbricht keine Serie); to = null: läuft noch */
   vacations: { from: string; to: string | null }[];
+  /** Darstellung je Ansicht, Schlüssel z. B. "project:<id>", "label:<name>", "calendar" */
+  views: Record<string, ViewPref>;
+  /** eigene Filter */
+  filters: SavedFilter[];
 }
 
 export const DEFAULT_SETTINGS: UserSettings = {
@@ -94,6 +117,8 @@ export const DEFAULT_SETTINGS: UserSettings = {
   weeklyGoal: 25,
   daysOff: [],
   vacations: [],
+  views: {},
+  filters: [],
 };
 
 

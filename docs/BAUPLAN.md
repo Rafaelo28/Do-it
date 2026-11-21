@@ -33,7 +33,7 @@
 | 5 – Schlauer Parser | weitgehend | 174 Korpus-Sätze, Feiertage, Jahreszeiten, „außer“, Projekt-Aliasse, lokal gelernte Projektvorschläge, Mehrzeilen-Eingabe, Teilen-Ziel |
 | 7 – Claude | fertig | MCP-Connector mit OAuth 2.1 (wie Todoist), Werkzeuge für Überblick, Suche, Anlegen per Parser, Ändern, Abhaken, Briefings in App + Push, persönliche Schlüssel – siehe `docs/claude.md` |
 | 8 – Absicherung | fertig | Einrichtungscode fürs erste Konto, Zwei-Faktor-Anmeldung (TOTP) mit Wiederherstellungscodes, Geräteliste, `__Host-`-Cookie, HSTS, CSP, Anfrage-Limits, Passwort-Sperrliste, gehärtete Container |
-| 6 – Extras | teilweise | Fertig: Kalender-Abo, Filter, Todoist-Import (API-Schlüssel, Backup-ZIP, CSV), Tastenkürzel, Erledigt-Übersicht, Karma mit Stufen/Zielen/Serien, Profilbilder. Offen: ntfy/E-Mail-Kanal, Passwort-Reset per Mail (braucht SMTP), Passkeys |
+| 6 – Extras | teilweise | Fertig: Kalender-Abo, Filter, Todoist-Import (API-Schlüssel, Backup-ZIP, CSV), Tastenkürzel, Erledigt-Übersicht, Karma mit Stufen/Zielen/Serien, Profilbilder, Kalender (Tag/Woche/Monat) mit Zeitblöcken, Termine ohne To-do, Board- und Tabellen-Darstellung, eigene Filter mit Abfragesprache, Deadlines in Heute/Demnächst/Kalender-Abo. Offen: ntfy/E-Mail-Kanal, Passwort-Reset per Mail (braucht SMTP), Passkeys |
 
 **Abweichungen vom ursprünglichen Plan** (bewusst, zugunsten von Einfachheit):
 - Statt Drizzle ORM: eine schlanke eigene Query-Schicht mit SQL-Migrationen.

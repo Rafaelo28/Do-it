@@ -137,6 +137,21 @@ try {
   await anna.page.locator('li.task', { hasText: 'Müll rausbringen' }).waitFor();
   step('Erledigt-Übersicht mit Wieder-öffnen');
 
+  // ---------- Kalender mit Zeitblock, Board ----------
+  await anna.page.getByRole('link', { name: 'Heute' }).click();
+  await add(anna.page, 'Arzttermin morgen 10 Uhr 1h');
+  await anna.page.getByRole('link', { name: 'Kalender' }).click();
+  await anna.page.getByRole('button', { name: 'Woche' }).click();
+  const block = anna.page.locator('.cal-block', { hasText: 'Arzttermin' });
+  await block.waitFor();
+  assert.match(await block.innerText(), /10:00–11:00/);
+  await anna.page.getByRole('link', { name: /Haushalt/ }).click();
+  await anna.page.getByRole('button', { name: 'Board' }).click();
+  await anna.page.locator('.board-card', { hasText: 'Müll rausbringen' }).waitFor();
+  await anna.page.getByRole('button', { name: 'Liste' }).click();
+  await anna.page.locator('li.task', { hasText: 'Müll rausbringen' }).waitFor();
+  step('Kalender mit Zeitblock, Board und Liste');
+
   if (SHOTS) {
     await anna.page.screenshot({ path: `${SHOTS}/e2e-anna.png` });
     await ben.page.screenshot({ path: `${SHOTS}/e2e-ben.png` });
