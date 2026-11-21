@@ -6,10 +6,12 @@ import { QuickAdd } from './components/QuickAdd';
 import { Sidebar } from './components/Sidebar';
 import { Modal, Toasts } from './components/ui';
 import { api, setUnauthorizedHandler } from './lib/api';
-import { DataProvider } from './lib/data';
+import { DataProvider, useData } from './lib/data';
 import { db } from './lib/db';
 import { toast } from './lib/store';
 import { sync, syncState, wipeLocalData } from './lib/sync';
+import { isStandalone } from './lib/push';
+import { LAUNCH_PATH, startPath } from './lib/start';
 import { setTimeZone } from './lib/time';
 import { AuthView } from './views/Auth';
 import { BriefingsView } from './views/Briefings';
@@ -39,7 +41,7 @@ export function App() {
     if (cached && cached.id !== me.id) {
       // anderer Nutzer auf diesem Gerät: alte Daten verwerfen
       await wipeLocalData();
-      location === '/' ? window.location.reload() : (window.location.href = '/today');
+      location === '/' ? window.location.reload() : (window.location.href = '/');
       return;
     }
     setTimeZone(me.timezone);
@@ -73,9 +75,9 @@ export function App() {
   const invite = /^\/invite\/([\w-]+)/.exec(location)?.[1];
 
   if (phase === 'loading') return <div className="auth muted">Lade …</div>;
-  if (phase === 'setup') return <AuthView mode="setup" onDone={(me) => void start(me).then(() => navigate('/today'))} />;
+  if (phase === 'setup') return <AuthView mode="setup" onDone={(me) => void start(me).then(() => navigate('/'))} />;
   if (phase === 'login') {
-    if (invite) return <AuthView mode="register" token={invite} onDone={(me) => void start(me).then(() => navigate('/today'))} />;
+    if (invite) return <AuthView mode="register" token={invite} onDone={(me) => void start(me).then(() => navigate('/'))} />;
     const next = new URLSearchParams(search).get('next');
     return (
       <AuthView
@@ -85,7 +87,7 @@ export function App() {
             // Freigabe für Claude o. Ä.: zurück zur Server-Seite (keine App-Route)
             if (next?.startsWith('/oauth/')) window.location.href = next;
             else if (next?.startsWith('/')) navigate(next);
-            else if (location === '/login' || location === '/') navigate('/today');
+            else if (location === '/login' || location === '/') navigate('/', { replace: true });
           })
         }
       />
@@ -98,6 +100,26 @@ export function App() {
   );
 }
 
+let launchHandled = false;
+
+/** "/" führt zur gewählten Startseite (Einstellungen → Erscheinungsbild) */
+function StartRedirect() {
+  const data = useData();
+  const settings = syncState.select((s) => s.me?.settings);
+  const synced = syncState.select((s) => s.ready || s.status === 'offline' || s.status === 'error');
+  // Auf einem neuen Gerät kommen Projekte und Filter erst mit der ersten Synchronisierung:
+  // so lange warten, statt gleich auf "Heute" auszuweichen
+  const [giveUp, setGiveUp] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setGiveUp(true), synced ? 400 : 5000);
+    return () => clearTimeout(t);
+  }, [synced]);
+  if (!data.loaded) return null;
+  const target = startPath(settings, data);
+  if (target !== (settings?.startPage ?? '/today') && !giveUp) return <div className="page muted">Lade …</div>;
+  return <Redirect to={target} replace />;
+}
+
 function Shell() {
   const [menu, setMenu] = useState(false);
   const [adding, setAdding] = useState<string | null>(null);
@@ -106,6 +128,18 @@ function Shell() {
   const projectId = /^\/project\/([\w-]+)/.exec(location)?.[1];
 
   useEffect(() => startKarmaUpdates(), []);
+
+  // Als App vom Startbildschirm geöffnet, aber noch mit der alten Startadresse "/today":
+  // einmalig zur gewählten Startseite wechseln
+  const data = useData();
+  useEffect(() => {
+    if (!data.loaded || launchHandled) return;
+    launchHandled = true;
+    if (LAUNCH_PATH !== '/today' || location !== '/today' || !isStandalone()) return;
+    const target = startPath(syncState.get().me?.settings, data);
+    if (target !== '/today') navigate(target, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.loaded]);
 
   useEffect(() => {
     if (new URLSearchParams(search).get('add') === '1') {
@@ -143,7 +177,7 @@ function Shell() {
         </div>
         <Switch>
           <Route path="/">
-            <Redirect to="/today" />
+            <StartRedirect />
           </Route>
           <Route path="/today" component={TodayView} />
           <Route path="/upcoming" component={UpcomingView} />
@@ -173,7 +207,7 @@ function Shell() {
             <ShareTarget onOpen={setAdding} />
           </Route>
           <Route>
-            <Redirect to="/today" />
+            <StartRedirect />
           </Route>
         </Switch>
       </main>

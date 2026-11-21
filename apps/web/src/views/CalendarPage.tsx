@@ -8,7 +8,7 @@ export function CalendarPage() {
   const me = syncState.select((s) => s.me);
   const mine = tasks.filter((t) => !t.completedAt && (!t.assigneeId || t.assigneeId === me?.id));
   return (
-    <div className="page wide">
+    <div className="page wide calendar-page">
       <div className="page-head">
         <h1>Kalender</h1>
       </div>

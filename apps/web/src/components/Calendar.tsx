@@ -4,22 +4,25 @@ import {
   formatDateLong,
   isoWeekday,
   MONTHS_LONG,
+  MONTHS_SHORT,
   minutesToTime,
   nextOccurrence,
   startOfIsoWeek,
   timeToMinutes,
+  WEEKDAYS_LONG,
   WEEKDAYS_SHORT,
   type CalendarMode,
   type PlainDate,
 } from '@do-it/shared';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'wouter';
 import { updateTask } from '../lib/actions';
 import { useData } from '../lib/data';
 import type { Task } from '../lib/db';
+import { NARROW, useMedia } from '../lib/media';
 import { useNow } from '../lib/time';
 import { useViewPref } from '../lib/views';
-import { IconChevronLeft, IconChevronRight, IconFlag, IconRepeat } from './Icons';
+import { IconChevronLeft, IconChevronRight, IconFlag, IconPlus, IconRepeat } from './Icons';
 import { Segmented } from './LayoutSwitch';
 import { QuickAdd } from './QuickAdd';
 import { durationLabel, Modal } from './ui';
@@ -80,6 +83,50 @@ function rangeOf(mode: CalendarMode, anchor: PlainDate): { days: PlainDate[]; ti
   return { days: Array.from({ length: 42 }, (_, i) => addDays(start, i)), title: `${MONTHS_LONG[m - 1]} ${y}` };
 }
 
+const partsOf = (d: PlainDate) => d.split('-').map(Number) as [number, number, number];
+
+/** Kurzer Titel fürs Handy, z. B. "Sa, 21. November" oder "16.–22. November" */
+function shortTitle(mode: CalendarMode, anchor: PlainDate, days: PlainDate[], today: PlainDate): string {
+  const [y, m, d] = partsOf(anchor);
+  const year = (yy: number) => (String(yy) === today.slice(0, 4) ? '' : ` ${yy}`);
+  if (mode === 'day') return `${WEEKDAYS_SHORT[isoWeekday(anchor) - 1]}, ${d}. ${MONTHS_LONG[m - 1]}${year(y)}`;
+  if (mode === 'week') {
+    const [, m1, d1] = partsOf(days[0]!);
+    const [y2, m2, d2] = partsOf(days[6]!);
+    return m1 === m2 ? `${d1}.–${d2}. ${MONTHS_LONG[m2 - 1]}${year(y2)}` : `${d1}. ${MONTHS_SHORT[m1 - 1]} – ${d2}. ${MONTHS_SHORT[m2 - 1]}${year(y2)}`;
+  }
+  return `${MONTHS_LONG[m - 1]} ${y}`;
+}
+
+interface DayDots {
+  dots: { color: string; deadline: boolean }[];
+  count: number;
+}
+
+/** Farbpunkte für einen Tag (Wochenleiste, Monat auf dem Handy) */
+function dotsFor(d: PlainDate, occ: Occ[], deadlines: Task[], colorOf: (t: Task) => string): DayDots {
+  const dl = deadlines.filter((t) => t.deadline === d).map(() => ({ color: 'var(--danger)', deadline: true }));
+  const items = occ
+    .filter((o) => o.date === d)
+    .sort((a, b) => (a.task.dueTime ?? '').localeCompare(b.task.dueTime ?? ''))
+    .map((o) => ({ color: colorOf(o.task), deadline: false }));
+  const all = [...dl, ...items];
+  return { dots: all.slice(0, 3), count: all.length };
+}
+
+function Dots({ dots, count }: DayDots) {
+  return (
+    <span className="cal-dots" aria-hidden="true">
+      {dots.map((x, i) => (
+        <i key={i} className={x.deadline ? 'deadline' : ''} style={{ background: x.color }} />
+      ))}
+      {count > 3 && <i className="more" />}
+    </span>
+  );
+}
+
+const countText = (n: number) => (n ? `, ${n} ${n === 1 ? 'Eintrag' : 'Einträge'}` : '');
+
 /** Überlappende Termine nebeneinander: Spalte und Spaltenzahl je Termin */
 function layoutDay<T extends { start: number; end: number }>(items: T[]): (T & { col: number; cols: number })[] {
   const sorted = [...items].sort((a, b) => a.start - b.start || b.end - a.end);
@@ -129,8 +176,20 @@ interface DragState {
 export function CalendarView({ tasks, prefKey, projectId, unscheduled = [] }: { tasks: Task[]; prefKey: string; projectId?: string; unscheduled?: Task[] }) {
   const [pref, setPref] = useViewPref(prefKey, { cal: 'week' });
   const mode = pref.cal ?? 'week';
+  const narrow = useMedia(NARROW);
   const now = useNow();
-  const [anchor, setAnchor] = useState(now.date);
+  const [anchor, setAnchorState] = useState(now.date);
+  /** Richtung des letzten Wechsels (für die kurze Schiebe-Animation) */
+  const dir = useRef(0);
+  const setAnchor = (d: PlainDate) => {
+    dir.current = d > anchor ? 1 : d < anchor ? -1 : 0;
+    setAnchorState(d);
+  };
+  const setMode = (cal: CalendarMode) => {
+    dir.current = 0;
+    setPref({ cal });
+  };
+  const touch = useRef<{ x: number; y: number; t: number } | null>(null);
   const [adding, setAdding] = useState<string | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
   const dragRef = useRef<DragState | null>(null);
@@ -141,12 +200,34 @@ export function CalendarView({ tasks, prefKey, projectId, unscheduled = [] }: { 
   const { days, title } = rangeOf(mode, anchor);
   const from = days[0]!;
   const to = days[days.length - 1]!;
-  const occ = useMemo(() => occurrences(tasks, from, to), [tasks, from, to]);
-  const deadlines = useMemo(() => tasks.filter((t) => t.deadline && t.deadline >= from && t.deadline <= to), [tasks, from, to]);
+  // in der Tagesansicht die ganze Woche laden: für die Punkte in der Wochenleiste
+  const spanFrom = mode === 'day' ? startOfIsoWeek(anchor) : from;
+  const spanTo = mode === 'day' ? addDays(spanFrom, 6) : to;
+  const occ = useMemo(() => occurrences(tasks, spanFrom, spanTo), [tasks, spanFrom, spanTo]);
+  const deadlines = useMemo(() => tasks.filter((t) => t.deadline && t.deadline >= spanFrom && t.deadline <= spanTo), [tasks, spanFrom, spanTo]);
 
-  const step = (dir: number) =>
-    setAnchor((a) => (mode === 'day' ? addDays(a, dir) : mode === 'week' ? addDays(a, 7 * dir) : addMonths(`${a.slice(0, 7)}-01`, dir)));
+  const step = (n: number) => setAnchor(mode === 'day' ? addDays(anchor, n) : mode === 'week' ? addDays(anchor, 7 * n) : addMonths(anchor, n));
   const colorOf = (t: Task) => projectMap.get(t.projectId)?.color ?? 'var(--accent)';
+  const toDay = (d: PlainDate) => {
+    setAnchor(d);
+    setMode('day');
+  };
+
+  // Wischen nach links/rechts blättert (Handy, Tablet)
+  const onTouchStart = (e: React.TouchEvent) => {
+    const p = e.touches[0];
+    const el = e.target as HTMLElement;
+    touch.current = e.touches.length === 1 && p && !el.closest('input, textarea, .modal-back, .select-pop') ? { x: p.clientX, y: p.clientY, t: Date.now() } : null;
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const s = touch.current;
+    const p = e.changedTouches[0];
+    touch.current = null;
+    if (!s || !p) return;
+    const dx = p.clientX - s.x;
+    const dy = p.clientY - s.y;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > 1.6 * Math.abs(dy) && Date.now() - s.t < 700) step(dx < 0 ? 1 : -1);
+  };
 
   // ---------- Ziehen (Maus/Stift; auf Touch öffnet Tippen die Aufgabe) ----------
 
@@ -211,9 +292,12 @@ export function CalendarView({ tasks, prefKey, projectId, unscheduled = [] }: { 
   const timeOf = (o: Occ) => (o.task.dueTime ? timeToMinutes(o.task.dueTime) : null);
 
   return (
-    <div className="cal">
+    <div className={`cal ${narrow ? 'narrow' : ''}`} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       <div className="cal-bar">
-        <div className="row" style={{ gap: 4 }}>
+        <strong className="cal-title" aria-live="polite">
+          {narrow ? shortTitle(mode, anchor, days, now.date) : title}
+        </strong>
+        <div className="cal-nav">
           <button className="icon-btn" aria-label="Zurück" onClick={() => step(-1)}>
             <IconChevronLeft />
           </button>
@@ -223,57 +307,60 @@ export function CalendarView({ tasks, prefKey, projectId, unscheduled = [] }: { 
           <button className="icon-btn" aria-label="Weiter" onClick={() => step(1)}>
             <IconChevronRight />
           </button>
-          <strong className="cal-title">{title}</strong>
         </div>
-        <Segmented
-          label="Kalender-Ansicht"
-          value={mode}
-          onChange={(v) => setPref({ cal: v })}
-          options={[
-            { value: 'day', label: 'Tag' },
-            { value: 'week', label: 'Woche' },
-            { value: 'month', label: 'Monat' },
-          ]}
-        />
+        <div className="cal-modes">
+          <Segmented
+            label="Kalender-Ansicht"
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: 'day', label: 'Tag' },
+              { value: 'week', label: 'Woche' },
+              { value: 'month', label: 'Monat' },
+            ]}
+          />
+        </div>
       </div>
 
+      {mode === 'day' && <WeekStrip anchor={anchor} today={now.date} occ={occ} deadlines={deadlines} colorOf={colorOf} onPick={setAnchor} />}
+
       <div className={`cal-body ${unscheduled.length && mode !== 'month' ? 'with-side' : ''}`}>
-        {mode === 'month' ? (
-          <MonthGrid
-            days={days}
-            month={anchor.slice(0, 7)}
-            today={now.date}
-            occ={occ}
-            deadlines={deadlines}
-            drag={drag}
-            colorOf={colorOf}
-            onDay={(d) => {
-              setAnchor(d);
-              setPref({ cal: 'day' });
-            }}
-            onAdd={(d) => !suppressClick.current && setAdding(addText(d, now.date))}
-            onOpen={open}
-            startDrag={startDrag}
-          />
-        ) : (
-          <TimeGrid
-            days={days}
-            today={now.date}
-            nowMin={timeToMinutes(now.time)}
-            occ={occ}
-            deadlines={deadlines}
-            drag={drag}
-            colorOf={colorOf}
-            timeOf={timeOf}
-            onDay={(d) => {
-              setAnchor(d);
-              setPref({ cal: 'day' });
-            }}
-            onAdd={(d, m) => !suppressClick.current && setAdding(addText(d, now.date, m))}
-            onOpen={open}
-            startDrag={startDrag}
-          />
-        )}
+        <div key={`${mode}-${from}`} className="cal-anim" data-dir={dir.current}>
+          {mode === 'month' ? (
+            <MonthGrid
+              days={days}
+              month={anchor.slice(0, 7)}
+              today={now.date}
+              occ={occ}
+              deadlines={deadlines}
+              drag={drag}
+              colorOf={colorOf}
+              compact={narrow}
+              selected={anchor}
+              onSelect={setAnchor}
+              onDay={toDay}
+              onAdd={(d) => !suppressClick.current && setAdding(addText(d, now.date))}
+              onOpen={open}
+              startDrag={startDrag}
+            />
+          ) : (
+            <TimeGrid
+              days={days}
+              today={now.date}
+              nowMin={timeToMinutes(now.time)}
+              occ={occ}
+              deadlines={deadlines}
+              drag={drag}
+              colorOf={colorOf}
+              timeOf={timeOf}
+              hideHeads={mode === 'day'}
+              onDay={toDay}
+              onAdd={(d, m) => !suppressClick.current && setAdding(addText(d, now.date, m))}
+              onOpen={open}
+              startDrag={startDrag}
+            />
+          )}
+        </div>
         {unscheduled.length > 0 && mode !== 'month' && (
           <aside className="cal-side">
             <div className="small muted" style={{ fontWeight: 600 }}>
@@ -298,6 +385,19 @@ export function CalendarView({ tasks, prefKey, projectId, unscheduled = [] }: { 
         )}
       </div>
 
+      {mode === 'month' && narrow && (
+        <DayAgenda
+          date={anchor}
+          today={now.date}
+          occ={occ}
+          deadlines={deadlines}
+          colorOf={colorOf}
+          onOpen={open}
+          onAdd={(d) => setAdding(addText(d, now.date))}
+          onDayView={() => toDay(anchor)}
+        />
+      )}
+
       {adding !== null && (
         <Modal onClose={() => setAdding(null)} label="Neue Aufgabe">
           <QuickAdd autoFocus asEvent initialText={adding} projectId={projectId} onDone={() => setAdding(null)} />
@@ -319,32 +419,55 @@ interface GridProps {
   startDrag: (e: React.PointerEvent, t: Task, kind: 'move' | 'resize', offsetMin?: number) => void;
 }
 
-function TimeGrid({ days, today, nowMin, occ, deadlines, drag, colorOf, timeOf, onDay, onAdd, onOpen, startDrag }: GridProps & {
+function TimeGrid({ days, today, nowMin, occ, deadlines, drag, colorOf, timeOf, hideHeads, onDay, onAdd, onOpen, startDrag }: GridProps & {
   nowMin: number;
   timeOf: (o: Occ) => number | null;
+  hideHeads?: boolean;
   onAdd: (d: PlainDate, minutes?: number) => void;
 }) {
   const scroll = useRef<HTMLDivElement>(null);
+
+  // Startposition: heute rund um die aktuelle Uhrzeit, sonst ab dem ersten Termin
   useEffect(() => {
     const el = scroll.current;
     if (!el) return;
-    const start = days.includes(today) ? Math.max(0, Math.min(nowMin - 90, 17 * 60)) : 7 * 60;
-    el.scrollTop = (start / 60) * HOUR;
+    const starts = occ.filter((o) => days.includes(o.date)).flatMap((o) => (timeOf(o) === null ? [] : [timeOf(o)!]));
+    const start = days.includes(today) ? nowMin - 90 : Math.min(8 * 60, ...starts) - 30;
+    // auf eine volle Stunde, damit oben keine Uhrzeit angeschnitten ist
+    const max = Math.floor((el.scrollHeight - el.clientHeight + 10) / HOUR);
+    const hour = Math.min(max, Math.floor(Math.max(0, Math.min(start, 17 * 60)) / 60));
+    el.scrollTop = hour > 0 ? hour * HOUR - 10 : 0;
     // nur beim ersten Anzeigen bzw. Wechsel des Zeitraums
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [days[0], days.length]);
 
+  // Zeitraster bis zum unteren Bildschirmrand, ohne dass die ganze Seite mitscrollt
+  useLayoutEffect(() => {
+    const el = scroll.current;
+    if (!el) return;
+    const top = el.getBoundingClientRect().top + window.scrollY;
+    el.style.maxHeight = `${Math.max(320, Math.round(window.innerHeight - top - 16))}px`;
+  });
+  const [, rerender] = useState(0);
+  useEffect(() => {
+    const onResize = () => rerender((n) => n + 1);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
   return (
-    <div className="cal-week" style={{ '--days': days.length } as React.CSSProperties}>
-      <div className="cal-row cal-heads">
-        <div className="cal-gutter" />
-        {days.map((d) => (
-          <button key={d} className={`cal-day-head ${d === today ? 'today' : ''}`} onClick={() => onDay(d)}>
-            <span>{WEEKDAYS_SHORT[isoWeekday(d) - 1]}</span>
-            <b>{Number(d.slice(8))}</b>
-          </button>
-        ))}
-      </div>
+    <div className="cal-week" data-days={days.length} style={{ '--days': days.length } as React.CSSProperties}>
+      {!hideHeads && (
+        <div className="cal-row cal-heads">
+          <div className="cal-gutter" />
+          {days.map((d) => (
+            <button key={d} className={`cal-day-head ${d === today ? 'today' : ''}`} aria-label={`${formatDateLong(d)} – Tagesansicht`} onClick={() => onDay(d)}>
+              <span>{WEEKDAYS_SHORT[isoWeekday(d) - 1]}</span>
+              <b>{Number(d.slice(8))}</b>
+            </button>
+          ))}
+        </div>
+      )}
       <div className="cal-row cal-allday-row">
         <div className="cal-gutter cal-allday-label muted">ganz{'\u00AD'}tägig</div>
         {days.map((d) => {
@@ -455,7 +578,52 @@ function TimeGrid({ days, today, nowMin, occ, deadlines, drag, colorOf, timeOf, 
   );
 }
 
-function MonthGrid({ days, month, today, occ, deadlines, drag, colorOf, onDay, onAdd, onOpen, startDrag }: GridProps & { month: string; onAdd: (d: PlainDate) => void }) {
+function MonthGrid({
+  days,
+  month,
+  today,
+  occ,
+  deadlines,
+  drag,
+  colorOf,
+  compact,
+  selected,
+  onSelect,
+  onDay,
+  onAdd,
+  onOpen,
+  startDrag,
+}: GridProps & { month: string; compact: boolean; selected: PlainDate; onSelect: (d: PlainDate) => void; onAdd: (d: PlainDate) => void }) {
+  if (compact) {
+    // Handy: Punkte statt Einträgen, Tippen wählt den Tag (Liste darunter)
+    return (
+      <div className="cal-month compact">
+        <div className="cal-month-head">
+          {WEEKDAYS_SHORT.map((w) => (
+            <span key={w}>{w}</span>
+          ))}
+        </div>
+        <div className="cal-month-grid">
+          {days.map((d) => {
+            const dots = dotsFor(d, occ, deadlines, colorOf);
+            return (
+              <button
+                key={d}
+                className={`cal-cell compact ${d.slice(0, 7) !== month ? 'other' : ''} ${d === today ? 'today' : ''} ${d === selected ? 'selected' : ''}`}
+                aria-pressed={d === selected}
+                aria-label={`${formatDateLong(d)}${countText(dots.count)}`}
+                onClick={() => onSelect(d)}
+                onDoubleClick={() => onDay(d)}
+              >
+                <span className="cal-cell-num">{Number(d.slice(8))}</span>
+                <Dots {...dots} />
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="cal-month">
       <div className="cal-month-head">
@@ -511,5 +679,103 @@ function MonthGrid({ days, month, today, occ, deadlines, drag, colorOf, onDay, o
         })}
       </div>
     </div>
+  );
+}
+
+/** Wochenleiste über der Tagesansicht: Tag antippen, Punkte zeigen, wo etwas ansteht */
+function WeekStrip({ anchor, today, occ, deadlines, colorOf, onPick }: { anchor: PlainDate; today: PlainDate; occ: Occ[]; deadlines: Task[]; colorOf: (t: Task) => string; onPick: (d: PlainDate) => void }) {
+  const mon = startOfIsoWeek(anchor);
+  return (
+    <div className="cal-strip" role="group" aria-label="Tag wählen">
+      {Array.from({ length: 7 }, (_, i) => {
+        const d = addDays(mon, i);
+        const dots = dotsFor(d, occ, deadlines, colorOf);
+        return (
+          <button
+            key={d}
+            className={`cal-strip-day ${d === anchor ? 'on' : ''} ${d === today ? 'today' : ''}`}
+            aria-pressed={d === anchor}
+            aria-label={`${formatDateLong(d)}${countText(dots.count)}`}
+            onClick={() => onPick(d)}
+          >
+            <span className="cal-strip-wd">{WEEKDAYS_SHORT[i]}</span>
+            <b>{Number(d.slice(8))}</b>
+            <Dots {...dots} />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Liste des gewählten Tags unter dem Monat (Handy) */
+function DayAgenda({
+  date,
+  today,
+  occ,
+  deadlines,
+  colorOf,
+  onOpen,
+  onAdd,
+  onDayView,
+}: {
+  date: PlainDate;
+  today: PlainDate;
+  occ: Occ[];
+  deadlines: Task[];
+  colorOf: (t: Task) => string;
+  onOpen: (t: Task) => void;
+  onAdd: (d: PlainDate) => void;
+  onDayView: () => void;
+}) {
+  const [, m, d] = partsOf(date);
+  const items = occ.filter((o) => o.date === date).sort((a, b) => (a.task.dueTime ?? '').localeCompare(b.task.dueTime ?? ''));
+  const dl = deadlines.filter((t) => t.deadline === date);
+  const day = date === today ? 'Heute' : WEEKDAYS_LONG[isoWeekday(date) - 1];
+  return (
+    <section className="cal-agenda" aria-label={`Plan für ${formatDateLong(date)}`}>
+      <div className="cal-agenda-head">
+        <strong>
+          {day}, {d}. {MONTHS_LONG[m - 1]}
+        </strong>
+        <button className="btn small ghost" onClick={onDayView}>
+          Tagesansicht
+        </button>
+      </div>
+      {!items.length && !dl.length ? (
+        <p className="muted small cal-agenda-empty">Nichts geplant.</p>
+      ) : (
+        <ul className="agenda">
+          {dl.map((t) => (
+            <li key={`dl-${t.id}`}>
+              <button className="agenda-item deadline" style={{ '--c': 'var(--danger)' } as React.CSSProperties} onClick={() => onOpen(t)}>
+                <span className="agenda-time">Deadline</span>
+                <span className="agenda-title">{t.title}</span>
+                <IconFlag size={13} />
+              </button>
+            </li>
+          ))}
+          {items.map((o) => {
+            const t = o.task;
+            const end = t.dueTime && t.durationMin ? minutesToTime(Math.min(1439, timeToMinutes(t.dueTime) + t.durationMin)) : null;
+            return (
+              <li key={`${t.id}-${o.date}`}>
+                <button className={`agenda-item ${t.isEvent ? 'event' : 'todo'} ${o.virtual ? 'virtual' : ''}`} style={{ '--c': colorOf(t) } as React.CSSProperties} onClick={() => onOpen(t)}>
+                  <span className="agenda-time">{t.dueTime ? `${t.dueTime}${end ? `–${end}` : ''}` : 'ganztägig'}</span>
+                  <span className="agenda-title">
+                    {!t.isEvent && <span className="todo-dot" aria-label="To-do" />}
+                    {t.title}
+                  </span>
+                  {t.recurrence && <IconRepeat size={12} />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <button className="btn small cal-agenda-add" onClick={() => onAdd(date)}>
+        <IconPlus size={15} /> Eintragen
+      </button>
+    </section>
   );
 }
