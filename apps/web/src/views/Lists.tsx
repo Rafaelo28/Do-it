@@ -15,7 +15,8 @@ export function LabelView({ name }: { name: string }) {
   const key = `label:${name.toLowerCase()}`;
   const [pref, setPref] = useViewPref(key, { layout: 'list', group: 'project' });
   const layout = pref.layout ?? 'list';
-  const list = tasks.filter((t) => !t.completedAt && t.labels.some((l) => l.toLowerCase() === name.toLowerCase())).sort(byDue);
+  const all = tasks.filter((t) => !t.completedAt && t.labels.some((l) => l.toLowerCase() === name.toLowerCase())).sort(byDue);
+  const list = all.filter((t) => !t.isEvent);
   return (
     <div className={`page ${layout !== 'list' ? 'wide' : ''}`}>
       <div className="page-head">
@@ -26,7 +27,7 @@ export function LabelView({ name }: { name: string }) {
         </div>
       </div>
       <QuickAdd placeholder={`Neue Aufgabe mit @${name}`} defaults={{ labels: [name] }} key={name} />
-      <LayoutBody prefKey={key} pref={{ ...pref, layout }} setPref={setPref} tasks={list} groups={['project', 'priority', 'date']} list={<TaskList tasks={list} />} />
+      <LayoutBody prefKey={key} pref={{ ...pref, layout }} setPref={setPref} tasks={all} groups={['project', 'priority', 'date']} list={<TaskList tasks={list} />} />
     </div>
   );
 }
@@ -70,7 +71,7 @@ export function FilterView({ name }: { name: string }) {
   const [pref, setPref] = useViewPref(key, { layout: 'list', group: 'project' });
   if (!f || !me) return <div className="page"><div className="empty">Unbekannter Filter.</div></div>;
   const layout = pref.layout ?? 'list';
-  const list = tasks.filter((t) => !t.completedAt && f.match(t, { me: me.id, today: now.date })).sort(byDue);
+  const list = tasks.filter((t) => !t.completedAt && !t.isEvent && f.match(t, { me: me.id, today: now.date })).sort(byDue);
   return (
     <div className={`page ${layout !== 'list' ? 'wide' : ''}`}>
       <div className="page-head">

@@ -579,4 +579,36 @@ describe('Server', () => {
     expect(ics.text).toContain('SUMMARY:Deadline: Abgabe Bericht');
     expect(ics.text).toContain('DTSTART;VALUE=DATE:20300201');
   });
+
+  it('Termine: kein Karma, Erinnerung an jeden Termin, Briefing und Kalender-Abo', async () => {
+    const id = uuidv7();
+    const rem = uuidv7();
+    const local = zonedParts(new Date(Date.now() - 2 * 86400_000), 'Europe/Berlin');
+    // wöchentlich wiederkehrender Termin, der erste lag vor zwei Tagen
+    await anna.push([
+      { type: 'task', id, data: { projectId: annaInbox, title: 'Chorprobe', isEvent: true, dueDate: local.date, dueTime: '19:00', durationMin: 90, recurrence: { freq: 'day', interval: 7 }, createdAt: 'x' } },
+      { type: 'reminder', id: rem, data: { taskId: id, kind: 'relative', offsetMin: 60 } },
+    ]);
+    const sched = await db.one<{ fire_at: Date }>('SELECT fire_at FROM reminder_schedule WHERE reminder_id = $1', [rem]);
+    const next = zonedToUtc(new Date(new Date(`${local.date}T12:00:00Z`).getTime() + 7 * 86400_000).toISOString().slice(0, 10), '18:00', 'Europe/Berlin');
+    expect(new Date(sched!.fire_at).getTime()).toBe(next.getTime());
+    // Erinnerung kommt ohne Erledigt-Knöpfe, danach ist der nächste Termin geplant
+    sent.length = 0;
+    expect((await processDueReminders(db, push, new Date(next.getTime() + 1000))).sent).toBe(1);
+    const msg = sent.find((s) => s.payload.title === 'Chorprobe')!;
+    expect(String(msg.payload.body)).toMatch(/^Termin · /);
+    expect(msg.payload.tokens).toBeUndefined();
+    const again = await db.one<{ fire_at: Date; sent_at: Date | null }>('SELECT fire_at, sent_at FROM reminder_schedule WHERE reminder_id = $1', [rem]);
+    expect(new Date(again!.fire_at).getTime()).toBe(next.getTime() + 7 * 86400_000);
+    expect(again!.sent_at).toBeNull();
+    // Termine zählen nicht fürs Karma
+    const k = (await anna.req<KarmaSummary>('GET', '/api/karma')).json.points;
+    await anna.push([{ type: 'task', id, data: { completedAt: new Date().toISOString() } }]);
+    expect((await anna.req<KarmaSummary>('GET', '/api/karma')).json.points).toBe(k);
+    await anna.push([{ type: 'task', id, data: { completedAt: null } }]);
+    // Kalender-Abo mit Wiederholung
+    const { json } = await anna.req<{ url: string }>('POST', '/api/me/ical');
+    const ics = await new Client().req('GET', new URL(json.url).pathname);
+    expect(ics.text).toMatch(/SUMMARY:Chorprobe[\s\S]*?RRULE:FREQ=DAILY;INTERVAL=7/);
+  });
 });

@@ -96,7 +96,7 @@ export async function createTaskFromParse(r: ParseResult, opts: CreateOptions): 
     sectionId,
     parentId,
     title: r.title,
-    priority: r.priority,
+    priority: opts.defaults?.isEvent ? 4 : r.priority,
     dueDate: r.dueDate ?? opts.defaults?.dueDate ?? null,
     dueTime: r.dueTime,
     deadline: r.deadline,

@@ -300,7 +300,7 @@ export function CalendarView({ tasks, prefKey, projectId, unscheduled = [] }: { 
 
       {adding !== null && (
         <Modal onClose={() => setAdding(null)} label="Neue Aufgabe">
-          <QuickAdd autoFocus initialText={adding} projectId={projectId} onDone={() => setAdding(null)} />
+          <QuickAdd autoFocus asEvent initialText={adding} projectId={projectId} onDone={() => setAdding(null)} />
         </Modal>
       )}
     </div>
@@ -362,7 +362,7 @@ function TimeGrid({ days, today, nowMin, occ, deadlines, drag, colorOf, timeOf, 
               {items.map((o) => (
                 <button
                   key={`${o.task.id}-${o.date}`}
-                  className={`cal-chip ${o.virtual ? 'virtual' : ''} ${drag?.task.id === o.task.id && !o.virtual ? 'dragging' : ''}`}
+                  className={`cal-chip ${o.task.isEvent ? 'event' : ''} ${o.virtual ? 'virtual' : ''} ${drag?.task.id === o.task.id && !o.virtual ? 'dragging' : ''}`}
                   style={{ '--c': colorOf(o.task) } as React.CSSProperties}
                   onPointerDown={o.virtual ? undefined : (e) => startDrag(e, o.task, 'move', 0)}
                   onClick={() => onOpen(o.task)}
@@ -414,7 +414,7 @@ function TimeGrid({ days, today, nowMin, occ, deadlines, drag, colorOf, timeOf, 
                       key={`${o.task.id}-${o.date}`}
                       role="button"
                       tabIndex={0}
-                      className={`cal-block ${o.virtual ? 'virtual' : ''} ${dragging ? 'dragging' : ''} ${end - start <= 30 ? 'short' : ''}`}
+                      className={`cal-block ${o.task.isEvent ? 'event' : 'todo'} ${o.virtual ? 'virtual' : ''} ${dragging ? 'dragging' : ''} ${end - start <= 30 ? 'short' : ''}`}
                       style={
                         {
                           top: (start / 60) * HOUR,
@@ -430,6 +430,7 @@ function TimeGrid({ days, today, nowMin, occ, deadlines, drag, colorOf, timeOf, 
                       onKeyDown={(e) => e.key === 'Enter' && onOpen(o.task)}
                     >
                       <span className="cal-block-title">
+                        {!o.task.isEvent && <span className="todo-dot" aria-label="To-do" />}
                         {o.task.recurrence && <IconRepeat size={11} />} {o.task.title}
                       </span>
                       <span className="cal-block-time">
@@ -490,7 +491,7 @@ function MonthGrid({ days, month, today, occ, deadlines, drag, colorOf, onDay, o
                 ) : (
                   <button
                     key={`${x.t.id}-${d}`}
-                    className={`cal-chip ${x.o.virtual ? 'virtual' : ''} ${drag?.task.id === x.t.id && !x.o.virtual ? 'dragging' : ''}`}
+                    className={`cal-chip ${x.t.isEvent ? 'event' : ''} ${x.o.virtual ? 'virtual' : ''} ${drag?.task.id === x.t.id && !x.o.virtual ? 'dragging' : ''}`}
                     style={{ '--c': colorOf(x.t) } as React.CSSProperties}
                     onPointerDown={x.o.virtual ? undefined : (e) => startDrag(e, x.t, 'move', 0)}
                     onClick={() => onOpen(x.t)}

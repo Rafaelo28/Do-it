@@ -368,7 +368,7 @@ export class SyncService {
       const recurUndone = !!before.lastCompletedAt && (after.lastCompletedAt ?? '') < before.lastCompletedAt;
       const completedNow = (!before.completedAt && !!after.completedAt) || recurredNow;
       const reopened = (!!before.completedAt && !after.completedAt) || recurUndone;
-      if (completedNow) {
+      if (completedNow && !after.isEvent) {
         await this.activity(q, projectId, user, 'completed', existing.id, `hat „${after.title}“ erledigt`);
         await recordCompletion(q, user, existing.id, { ...before, title: after.title }, e.notices);
       }

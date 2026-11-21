@@ -60,6 +60,8 @@ export const taskSchema = z.strictObject({
   sortKey: z.string().max(100),
   createdBy: idSchema.nullable(),
   createdAt: isoSchema,
+  /** Termin statt To-do: steht im Kalender, wird nicht abgehakt */
+  isEvent: z.boolean().optional(),
 });
 
 export const labelSchema = z.strictObject({

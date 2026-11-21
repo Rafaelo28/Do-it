@@ -32,7 +32,7 @@ export function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () =>
   const customFilters = me?.settings.filters ?? [];
   const [name, setName] = useState('');
 
-  const open_ = tasks.filter((t) => !t.completedAt);
+  const open_ = tasks.filter((t) => !t.completedAt && !t.isEvent);
   const mine = (t: (typeof tasks)[number]) => !t.assigneeId || t.assigneeId === me?.id;
   const todayCount = open_.filter((t) => t.dueDate && t.dueDate <= now.date && mine(t)).length;
   const overdue = open_.some((t) => t.dueDate && t.dueDate < now.date && mine(t));

@@ -2083,3 +2083,101 @@ img.avatar {
   color: var(--danger);
   border-bottom: 1px dashed var(--border);
 }
+
+/* ---------- Termine ---------- */
+
+.event-mark {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+}
+
+.chip.toggle {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.chip.toggle.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+/* Termine im Kalender: gefüllt; To-dos: hell mit kleinem Kreis */
+.cal-block.event,
+.cal-chip.event {
+  background: color-mix(in srgb, var(--c) 85%, #000);
+  color: #fff;
+  border-left-color: color-mix(in srgb, var(--c) 60%, #000);
+}
+
+.cal-block.event:hover {
+  background: color-mix(in srgb, var(--c) 72%, #000);
+}
+
+.cal-block.event .cal-block-time {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.cal-block.todo {
+  border: 1px solid color-mix(in srgb, var(--c) 40%, transparent);
+  border-left: 3px solid var(--c);
+}
+
+.todo-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  margin-right: 4px;
+  vertical-align: -1px;
+  opacity: 0.7;
+}
+
+.agenda {
+  list-style: none;
+  margin: 4px 0 6px;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.agenda-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px 6px 10px;
+  border-radius: 8px;
+  border-left: 3px solid var(--c);
+  background: color-mix(in srgb, var(--c) 8%, transparent);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.agenda-item:hover {
+  background: color-mix(in srgb, var(--c) 15%, transparent);
+}
+
+.agenda-time {
+  flex: none;
+  min-width: 92px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.82rem;
+}
+
+.agenda-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}

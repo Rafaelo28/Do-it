@@ -1,4 +1,4 @@
-import { addDays, zonedToUtc, type TaskData } from '@do-it/shared';
+import { addDays, toRRule, zonedToUtc, type TaskData } from '@do-it/shared';
 
 function esc(s: string): string {
   return s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
@@ -37,6 +37,10 @@ export function buildIcs(tasks: { id: string; data: TaskData }[], tz: string, ap
         lines.push(`DTSTART:${utcStamp(start)}`, `DTEND:${utcStamp(end)}`, 'TRANSP:OPAQUE');
       } else {
         lines.push(`DTSTART;VALUE=DATE:${t.dueDate.replace(/-/g, '')}`, `DTEND;VALUE=DATE:${addDays(t.dueDate, 1).replace(/-/g, '')}`, 'TRANSP:TRANSPARENT');
+      }
+      if (t.isEvent && t.recurrence) {
+        const rule = toRRule(t.recurrence);
+        if (rule) lines.push(`RRULE:${rule}`);
       }
       if (t.description) lines.push(`DESCRIPTION:${esc(t.description.slice(0, 2000))}`);
       lines.push('END:VEVENT');

@@ -29,23 +29,25 @@ export function LayoutBody({
   projectId?: string;
   showProject?: boolean;
 }) {
+  // Board und Tabelle zeigen nur To-dos, der Kalender auch Termine
+  const todos = tasks.filter((t) => !t.isEvent);
   switch (pref.layout) {
     case 'board':
       return (
         <Suspense fallback={loading}>
-          <BoardLayout tasks={tasks} group={pref.group ?? groups[0]!} groups={groups} onGroup={(group) => setPref({ group })} projectId={projectId} />
+          <BoardLayout tasks={todos} group={pref.group ?? groups[0]!} groups={groups} onGroup={(group) => setPref({ group })} projectId={projectId} />
         </Suspense>
       );
     case 'calendar':
       return (
         <Suspense fallback={loading}>
-          <CalendarView tasks={tasks} prefKey={prefKey} projectId={projectId} unscheduled={tasks.filter((t) => !t.dueDate && !t.parentId)} />
+          <CalendarView tasks={tasks} prefKey={prefKey} projectId={projectId} unscheduled={todos.filter((t) => !t.dueDate && !t.parentId)} />
         </Suspense>
       );
     case 'table':
       return (
         <Suspense fallback={loading}>
-          <TaskTable tasks={tasks} showProject={showProject} />
+          <TaskTable tasks={todos} showProject={showProject} />
         </Suspense>
       );
     default:

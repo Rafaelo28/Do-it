@@ -191,3 +191,35 @@ export function describeRecurrence(r: Recurrence): string {
   if (r.afterCompletion) text += ' nach Erledigung';
   return text;
 }
+
+/**
+ * Alle Termine einer (nicht von Erledigung abhängigen) Wiederholung im Zeitraum, beginnend bei `start`.
+ * Ohne Wiederholung nur `start` selbst, falls im Zeitraum.
+ */
+export function occurrencesBetween(start: PlainDate, r: Recurrence | null | undefined, from: PlainDate, to: PlainDate, max = 800): PlainDate[] {
+  const out: PlainDate[] = [];
+  if (start >= from && start <= to) out.push(start);
+  if (!r || r.afterCompletion) return out;
+  let d = start;
+  for (let i = 0; i < max; i++) {
+    const n = nextOccurrence(r, d, d);
+    if (!n || n > to || n <= d) break;
+    if (n >= from) out.push(n);
+    d = n;
+  }
+  return out;
+}
+
+/** Wiederholung als iCalendar-RRULE (ohne "nach Erledigung", das kennt iCalendar nicht). */
+export function toRRule(r: Recurrence): string | null {
+  if (r.afterCompletion) return null;
+  const DAYS = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
+  const parts = [`FREQ=${({ day: 'DAILY', week: 'WEEKLY', month: 'MONTHLY', year: 'YEARLY' } as const)[r.freq]}`];
+  if (r.interval > 1) parts.push(`INTERVAL=${r.interval}`);
+  if (r.weekdays?.length) parts.push(`BYDAY=${r.weekdays.map((w) => DAYS[w - 1]).join(',')}`);
+  if (r.nthWeekday) parts.push(`BYDAY=${r.nthWeekday.n}${DAYS[r.nthWeekday.weekday - 1]}`);
+  else if (r.monthDay !== undefined) parts.push(`BYMONTHDAY=${r.monthDay}`);
+  if (r.month) parts.push(`BYMONTH=${r.month}`);
+  if (r.until) parts.push(`UNTIL=${r.until.replace(/-/g, '')}`);
+  return parts.join(';');
+}

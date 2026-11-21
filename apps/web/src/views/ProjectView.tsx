@@ -12,6 +12,9 @@ import type { Project } from '../lib/db';
 import { toast } from '../lib/store';
 import { sync, syncState } from '../lib/sync';
 import { useViewPref } from '../lib/views';
+import { useNow } from '../lib/time';
+import { addDays, formatDateRelative } from '@do-it/shared';
+import { AgendaList, useEvents } from '../components/Agenda';
 import { LayoutSwitch } from '../components/LayoutSwitch';
 import { LayoutBody } from './Layouted';
 
@@ -27,11 +30,14 @@ export function ProjectView({ id }: { id: string }) {
   const [addIn, setAddIn] = useState<string | null>(null);
   const drag = dragState.use();
   const [pref, setPref] = useViewPref(`project:${id}`, { layout: 'list', group: 'section' });
+  const today = useNow().date;
+  const upcomingEvents = useEvents(today, addDays(today, 60), (t) => t.projectId === id);
+  const nextEvents = upcomingEvents.filter((e, i) => upcomingEvents.findIndex((x) => x.task.id === e.task.id) === i).slice(0, 8);
   const layout = pref.layout ?? 'list';
 
   if (!project) return <div className="page">{loaded && <div className="empty">Projekt nicht gefunden.</div>}</div>;
 
-  const projectTasks = tasks.filter((t) => t.projectId === id && (showDone || !t.completedAt));
+  const projectTasks = tasks.filter((t) => t.projectId === id && !t.isEvent && (showDone || !t.completedAt));
   const projectSections = sections.filter((s) => s.projectId === id);
   const unsectioned = projectTasks.filter((t) => !t.sectionId || !projectSections.some((s) => s.id === t.sectionId));
   const projectMembers = members.filter((m) => m.projectId === id);
@@ -75,6 +81,14 @@ export function ProjectView({ id }: { id: string }) {
 
       {layout === 'list' && (
       <>
+      {nextEvents.length > 0 && (
+        <section>
+          <div className="group-head">
+            Nächste Termine <span className="muted">{nextEvents.length}</span>
+          </div>
+          <AgendaList items={nextEvents} showDate={(d) => formatDateRelative(d, today)} />
+        </section>
+      )}
       <div data-drop-section="" className={dropZoneClass(drag, '')}>
         <TaskList tasks={unsectioned} showProject={false} sortable={myRole !== 'viewer'} />
       </div>

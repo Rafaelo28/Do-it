@@ -30,6 +30,8 @@ export interface QuickAddProps {
   sectionId?: string | null;
   parentId?: string | null;
   defaults?: Partial<TaskData>;
+  /** als Termin starten (z. B. Klick in den Kalender) */
+  asEvent?: boolean;
   autoFocus?: boolean;
   initialText?: string;
   placeholder?: string;
@@ -43,6 +45,8 @@ export function QuickAdd(props: QuickAddProps) {
   const [ignore, setIgnore] = useState<string[]>([]);
   const [manualProject, setManualProject] = useState<string | null>(null);
   const [batch, setBatch] = useState<ParseResult[] | null>(null);
+  const [eventMode, setEventMode] = useState(!!props.asEvent && !props.parentId);
+  const defaults = eventMode ? { ...props.defaults, isEvent: true } : props.defaults;
   const inputRef = useRef<HTMLInputElement>(null);
   const mirrorRef = useRef<HTMLDivElement>(null);
 
@@ -67,6 +71,7 @@ export function QuickAdd(props: QuickAddProps) {
   }, [projects, members, labels, me, ignore, text === '']);
 
   const result = useMemo(() => parseTask(text, ctx), [text, ctx]);
+  const needsDate = eventMode && !result.dueDate;
   // Das Lernmodell nur berechnen, wenn gerade wirklich ein Vorschlag gebraucht wird.
   const wantSuggestion = !props.parentId && !result.projectId && !result.newProjectName && !manualProject && result.title.length > 2;
   const model = useMemo(() => (wantSuggestion ? train(tasks, projects) : null), [wantSuggestion, tasks, projects]);
@@ -102,7 +107,7 @@ export function QuickAdd(props: QuickAddProps) {
   }
 
   async function submit() {
-    if (!me || !result.title.trim()) return;
+    if (!me || !result.title.trim() || needsDate) return;
     // Sofort leeren, damit man direkt weitertippen kann; gespeichert wird im Hintergrund.
     // Unteraufgaben bleiben immer im Projekt der Hauptaufgabe.
     const r: ParseResult = props.parentId
@@ -120,8 +125,9 @@ export function QuickAdd(props: QuickAddProps) {
         sectionId: props.sectionId,
         parentId: props.parentId,
         me,
-        defaults: props.defaults,
+        defaults,
       });
+      if (eventMode) toast(`Termin „${r.title}“ eingetragen`);
       const target = r.newProjectName ?? projectMap.get(r.projectId ?? baseProject)?.name;
       if ((r.projectId && r.projectId !== props.projectId) || r.newProjectName) toast(`Zu „${target}“ hinzugefügt`);
       props.onDone?.();
@@ -135,7 +141,7 @@ export function QuickAdd(props: QuickAddProps) {
     if (!me || !batch) return;
     const target = baseProject || (await waitForInbox());
     for (const r of batch) {
-      if (r.title.trim()) await createTaskFromParse(r, { projectId: target, sectionId: props.sectionId, parentId: props.parentId, me, defaults: props.defaults });
+      if (r.title.trim() && (!eventMode || r.dueDate)) await createTaskFromParse(r, { projectId: target, sectionId: props.sectionId, parentId: props.parentId, me, defaults });
     }
     toast(`${batch.length} Aufgaben angelegt`);
     setBatch(null);
@@ -201,7 +207,7 @@ export function QuickAdd(props: QuickAddProps) {
           className="qa-input"
           value={text}
           autoFocus={props.autoFocus}
-          placeholder={props.placeholder ?? 'z. B. „Morgen 15 Uhr Zahnarzt anrufen #Gesundheit“'}
+          placeholder={eventMode ? 'Termin, z. B. „Zahnarzt morgen 15 Uhr 1h“' : (props.placeholder ?? 'z. B. „Morgen 15 Uhr Zahnarzt anrufen #Gesundheit“')}
           aria-label="Neue Aufgabe"
           enterKeyHint="done"
           autoComplete="off"
@@ -301,6 +307,11 @@ export function QuickAdd(props: QuickAddProps) {
               <IconWarn size={14} /> {w}
             </span>
           ))}
+          {needsDate && result.title.trim() && (
+            <span className="chip warn">
+              <IconWarn size={14} /> Ein Termin braucht ein Datum, z. B. „morgen 15 Uhr“
+            </span>
+          )}
           {clash && (
             <span className="chip warn" title="Die Zeit ist schon durch einen anderen Termin belegt">
               <IconWarn size={14} /> Überschneidet sich mit „{clash.title}“ ({clash.dueTime}
@@ -326,14 +337,28 @@ export function QuickAdd(props: QuickAddProps) {
               </option>
             ))}
         </select>
+        {!props.parentId && (
+          <button
+            type="button"
+            className={`chip toggle ${eventMode ? 'on' : ''}`}
+            aria-pressed={eventMode}
+            title="Termin: steht im Kalender, wird nicht abgehakt"
+            onClick={() => {
+              setEventMode((v) => !v);
+              inputRef.current?.focus();
+            }}
+          >
+            <IconCalendar size={14} /> Termin
+          </button>
+        )}
         <span className="spacer" />
         {props.onDone && (
           <button className="btn ghost" onClick={props.onDone}>
             Abbrechen
           </button>
         )}
-        <button className="btn primary" disabled={!result.title.trim()} onClick={() => void submit()}>
-          Hinzufügen
+        <button className="btn primary" disabled={!result.title.trim() || needsDate} onClick={() => void submit()}>
+          {eventMode ? 'Termin eintragen' : 'Hinzufügen'}
         </button>
       </div>
     </div>

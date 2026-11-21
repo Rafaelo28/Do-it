@@ -50,7 +50,8 @@ export function CustomFilterView({ id }: { id: string }) {
   const f = filters?.find((x) => x.id === id);
   const result = useMemo(() => (f ? filterTasks(tasks, f.query, ctx) : { tasks: [], error: null }), [f, tasks, ctx]);
   if (!f) return <div className="page">{loaded && filters && <div className="empty">Diesen Filter gibt es nicht mehr.</div>}</div>;
-  const list = [...result.tasks].sort(byDue);
+  const all = [...result.tasks].sort(byDue);
+  const list = all.filter((t) => !t.isEvent);
   const layout = pref.layout ?? 'list';
 
   return (
@@ -76,7 +77,7 @@ export function CustomFilterView({ id }: { id: string }) {
           prefKey={`filter:${id}`}
           pref={{ ...pref, layout }}
           setPref={setPref}
-          tasks={list}
+          tasks={all}
           groups={['project', 'priority', 'date']}
           list={list.length ? <TaskList tasks={list} /> : <div className="empty">Gerade passt keine offene Aufgabe zu diesem Filter.</div>}
         />
