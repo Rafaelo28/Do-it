@@ -38,7 +38,7 @@ export const syncState = createStore<SyncState>({
   briefingAt: null,
 });
 
-const OBJECT_TABLES = () => [db.projects, db.sections, db.tasks, db.labels, db.reminders, db.comments];
+const OBJECT_TABLES = () => [db.projects, db.sections, db.tasks, db.labels, db.reminders, db.comments, db.notes];
 
 class SyncEngine {
   private clock: HybridClock | null = null;
@@ -270,6 +270,8 @@ class SyncEngine {
       }
       for (const o of objects) {
         const table = db.tableFor(o.type);
+        // unbekannter Typ (Server ist neuer als diese App-Version): überspringen statt abzubrechen
+        if (!table) continue;
         if (o.deleted) {
           await table.delete(o.id);
           continue;
@@ -319,6 +321,7 @@ async function localCascade(type: ObjectType, id: string): Promise<void> {
     await db.tasks.bulkDelete(taskIds);
     await db.reminders.where('taskId').anyOf(taskIds).delete();
     await db.comments.where('taskId').anyOf(taskIds).delete();
+    await db.notes.where('projectId').equals(id).delete();
   } else if (type === 'task') {
     const children = await db.tasks.where('parentId').equals(id).primaryKeys();
     for (const c of children) {

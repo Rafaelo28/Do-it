@@ -606,7 +606,13 @@ button.chip:hover {
   border-radius: var(--r-xs);
 }
 
-.task:hover {
+@media (hover: hover) {
+  .task:hover {
+    background: var(--hover);
+  }
+}
+
+.task:active {
   background: var(--hover);
 }
 
@@ -615,6 +621,7 @@ button.chip:hover {
 }
 
 .check {
+  position: relative;
   flex: none;
   width: 22px;
   height: 22px;
@@ -630,10 +637,71 @@ button.chip:hover {
   transition: background 0.15s;
 }
 
-.check:hover,
+/* größere Trefferfläche als der sichtbare Kreis (Finger) */
+.check::before {
+  content: '';
+  position: absolute;
+  inset: -10px;
+  border-radius: 50%;
+}
+
 .check.done {
   background: var(--pc, var(--p4));
   color: var(--surface);
+}
+
+/* Nur mit Maus: auf Touch-Geräten bliebe der Hover-Zustand nach dem Tippen
+   an der Stelle hängen und färbte die nächste Aufgabe ein */
+@media (hover: hover) {
+  .check:hover {
+    background: var(--pc, var(--p4));
+    color: var(--surface);
+  }
+}
+
+.check.completing {
+  animation: check-pop 0.28s ease-out;
+}
+
+@keyframes check-pop {
+  0% {
+    transform: scale(0.82);
+  }
+  55% {
+    transform: scale(1.18);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.task:has(.check.completing) .task-title,
+.board-card:has(.check.completing) .board-card-title {
+  text-decoration: line-through;
+  color: var(--muted);
+  transition: color 0.2s;
+}
+
+/* Zeile klappt nach dem Abhaken weg */
+.task.collapsing,
+.board-card.collapsing {
+  overflow: hidden;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+  border-bottom-width: 0;
+  transition:
+    height 0.18s ease,
+    opacity 0.18s ease,
+    padding 0.18s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .check.completing {
+    animation: none;
+  }
 }
 
 .task-body {
@@ -729,10 +797,14 @@ button.chip:hover {
   opacity: 1;
 }
 
+/* Touch: Griff ganz rechts, damit er nicht neben dem Abhak-Kreis liegt */
 @media (hover: none) {
   .drag-handle {
-    opacity: 0.55;
-    width: 20px;
+    order: 99;
+    opacity: 0.5;
+    width: 30px;
+    height: 30px;
+    margin: -4px -6px -4px 0;
   }
 }
 
@@ -3141,4 +3213,649 @@ label.row {
 .card > .segmented,
 .field > .segmented {
   justify-self: start;
+}
+
+/* ---------- Notizen ---------- */
+
+.notes-page {
+  max-width: 1240px;
+  padding-bottom: 40px;
+}
+
+.notes-layout {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.notes-list {
+  position: sticky;
+  top: 16px;
+  display: grid;
+  gap: 10px;
+  max-height: calc(100dvh - 40px);
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.notes-head {
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.notes-head h1 {
+  margin: 0;
+}
+
+.notes-tools {
+  display: grid;
+  gap: 8px;
+}
+
+.notes-tools .select {
+  justify-self: start;
+}
+
+.notes-search,
+.insert-search {
+  position: relative;
+  display: block;
+}
+
+.notes-search svg,
+.insert-search svg {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.notes-search .input,
+.insert-search .input {
+  width: 100%;
+  padding-left: 32px;
+}
+
+.notes-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.note-item {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  color: var(--text);
+  text-decoration: none;
+  border: 1px solid transparent;
+}
+
+@media (hover: hover) {
+  .note-item:hover {
+    background: var(--hover);
+  }
+}
+
+.note-item.active {
+  background: var(--surface);
+  border-color: var(--border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.note-item-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-pin {
+  flex: none;
+  color: var(--accent-strong);
+}
+
+.note-item-snippet {
+  color: var(--muted);
+  font-size: 0.86rem;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.note-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  color: var(--faint);
+  font-size: 0.76rem;
+}
+
+.note-item-meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.notes-empty {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  min-height: 320px;
+  border: 1px dashed var(--border);
+  border-radius: var(--r-lg);
+  text-align: center;
+  padding: 24px;
+}
+
+.note-pane {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.note-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.note-head .spacer {
+  flex: 1;
+}
+
+.note-head .icon-btn.on {
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+}
+
+.note-back {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  color: var(--accent-strong);
+  text-decoration: none;
+  margin-right: 6px;
+}
+
+.note-editor {
+  display: grid;
+  gap: 8px;
+  padding: 18px 22px 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  min-height: 60dvh;
+  align-content: start;
+}
+
+.note-title {
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  padding: 0;
+  width: 100%;
+}
+
+.note-title::placeholder {
+  color: var(--faint);
+}
+
+.note-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  margin: 0 -8px;
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.note-toolbar::-webkit-scrollbar {
+  display: none;
+}
+
+.tb {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .tb:hover:not(:disabled) {
+    background: var(--hover);
+    color: var(--text);
+  }
+}
+
+.tb.on {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.tb:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.tb-text {
+  color: var(--accent-strong);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tb-sep {
+  flex: none;
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: var(--border);
+}
+
+.tb-space {
+  flex: 1;
+  min-width: 8px;
+}
+
+.note-toolbar .select.ghost {
+  flex: none;
+  min-width: 124px;
+}
+
+.note-foot {
+  padding: 0 4px;
+}
+
+/* Text der Notiz */
+.note-body .ProseMirror {
+  outline: none;
+  min-height: 40dvh;
+  font-size: 1rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.note-prose > * + * {
+  margin-top: 0.6em;
+}
+
+.note-prose p {
+  margin: 0;
+}
+
+.note-prose h1,
+.note-prose h2,
+.note-prose h3 {
+  line-height: 1.25;
+  margin: 1.1em 0 0.2em;
+  letter-spacing: -0.01em;
+}
+
+.note-prose h1 {
+  font-size: 1.5rem;
+}
+
+.note-prose h2 {
+  font-size: 1.25rem;
+}
+
+.note-prose h3 {
+  font-size: 1.08rem;
+}
+
+.note-prose > :first-child {
+  margin-top: 0;
+}
+
+.note-prose ul,
+.note-prose ol {
+  margin: 0;
+  padding-left: 1.4em;
+}
+
+.note-prose li > p {
+  margin: 0;
+}
+
+.note-prose blockquote {
+  margin: 0;
+  padding: 2px 0 2px 14px;
+  border-left: 3px solid var(--border);
+  color: var(--muted);
+}
+
+.note-prose code {
+  background: var(--hover);
+  border-radius: var(--r-xs);
+  padding: 1px 5px;
+}
+
+.note-prose pre {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--hover);
+  overflow-x: auto;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.note-prose pre code {
+  background: none;
+  padding: 0;
+}
+
+.note-prose a {
+  color: var(--accent-strong);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.note-prose hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 1.2em 0;
+}
+
+.note-prose p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--faint);
+  pointer-events: none;
+}
+
+/* Checklisten (Markdown "- [ ]") */
+.note-prose ul[data-type='taskList'] {
+  list-style: none;
+  padding-left: 0.2em;
+}
+
+.note-prose ul[data-type='taskList'] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.note-prose ul[data-type='taskList'] li > label {
+  flex: none;
+  margin-top: 0.22em;
+  display: inline-flex;
+}
+
+.note-prose ul[data-type='taskList'] li > label input {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.note-prose ul[data-type='taskList'] li > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.note-prose ul[data-type='taskList'] li[data-checked='true'] > div {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+/* eingebettete Aufgabe */
+.note-task {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px 7px 10px;
+  margin: 0.35em 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--accent) 4%, var(--surface));
+  line-height: 1.35;
+}
+
+.note-task .check {
+  margin-top: 0;
+}
+
+.ProseMirror-selectednode.note-task,
+.ProseMirror-selectednode > .note-task {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.note-task-title {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--text);
+  font: inherit;
+  font-weight: 550;
+  text-align: left;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.note-task.done .note-task-title {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.note-task-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 10px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.note-task-meta .overdue {
+  color: var(--danger);
+}
+
+.note-task-meta .today {
+  color: var(--accent-strong);
+}
+
+.note-task-remove {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  color: var(--faint);
+}
+
+.note-task.missing {
+  border-style: dashed;
+  background: none;
+}
+
+/* Aufgabe einfügen */
+.insert-task {
+  display: grid;
+  gap: 10px;
+}
+
+.insert-task .quickadd {
+  margin: 0;
+}
+
+.insert-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  max-height: 40dvh;
+  overflow: auto;
+}
+
+.insert-results button {
+  display: grid;
+  gap: 1px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.insert-results button:hover,
+.insert-results button:focus-visible {
+  background: var(--hover);
+}
+
+.insert-title {
+  font-weight: 550;
+}
+
+@media (max-width: 1000px) {
+  .notes-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .notes-list {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .note-back {
+    display: inline-flex;
+  }
+}
+
+@media (max-width: 860px) {
+  .note-toolbar {
+    top: calc(53px + env(safe-area-inset-top));
+  }
+}
+
+@media (max-width: 600px) {
+  .notes-page {
+    padding-top: 12px;
+  }
+
+  .note-editor {
+    margin-inline: -8px;
+    padding: 14px 14px 24px;
+    border-radius: var(--r-md);
+  }
+
+  .note-title {
+    font-size: 1.35rem;
+  }
+
+  /* Handy: eine Zeile zum Wischen, wichtigste Knöpfe zuerst */
+  .note-toolbar {
+    margin: 0 -6px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .note-toolbar .tb-text {
+    order: -1;
+  }
+
+  .note-toolbar .select {
+    order: -2;
+  }
+
+  .note-toolbar .tb-space {
+    display: none;
+  }
+
+  .note-task-meta {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0;
+  }
+}
+
+.note-link {
+  position: relative;
+}
+
+.note-count {
+  position: absolute;
+  top: 1px;
+  right: 0;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 15px;
+  text-align: center;
+}
+
+.search-notes {
+  list-style: none;
+  margin: 12px 0 4px;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.search-notes a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 6px;
+  border-radius: var(--r-sm);
+  color: var(--text);
+  text-decoration: none;
+  border-bottom: 1px solid var(--border);
+}
+
+.search-notes a svg {
+  color: var(--accent-strong);
 }

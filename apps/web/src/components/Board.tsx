@@ -1,13 +1,14 @@
 import { addDays, generateKeyBetween, type BoardGroup, type PlainDate } from '@do-it/shared';
 import { useRef, useState } from 'react';
 import { useLocation } from 'wouter';
-import { moveTask, toggleTask, updateTask } from '../lib/actions';
+import { moveTask, updateTask } from '../lib/actions';
 import { useData } from '../lib/data';
 import type { Task } from '../lib/db';
 import { syncState } from '../lib/sync';
 import { useNow } from '../lib/time';
 import { Avatar } from './Avatar';
-import { IconCheck, IconClock, IconFlag, IconRepeat, IconSubtasks, IconTag } from './Icons';
+import { CheckButton } from './CheckButton';
+import { IconClock, IconFlag, IconRepeat, IconSubtasks, IconTag } from './Icons';
 import { QuickAdd } from './QuickAdd';
 import { dueLabel, durationLabel, PRIORITY_COLOR } from './ui';
 import { Select } from './Select';
@@ -115,7 +116,6 @@ export function Board({ tasks, columns, columnOf, sortable }: { tasks: Task[]; c
   const [, navigate] = useLocation();
   const { childStats } = useData();
   const members = syncState.select((s) => s.members);
-  const me = syncState.select((s) => s.me);
   const now = useNow();
 
   const byColumn = new Map<string, Task[]>(columns.map((c) => [c.key, []]));
@@ -200,17 +200,7 @@ export function Board({ tasks, columns, columnOf, sortable }: { tasks: Task[]; c
                       onPointerDown={(e) => start(e, t)}
                       onClick={() => !suppress.current && navigate(`/task/${t.id}`)}
                     >
-                      <button
-                        className="check"
-                        style={{ '--pc': PRIORITY_COLOR[t.priority] } as React.CSSProperties}
-                        aria-label="Erledigt"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (me) void toggleTask(t, me);
-                        }}
-                      >
-                        <IconCheck size={12} />
-                      </button>
+                      <CheckButton task={t} size={12} />
                       <div className="board-card-body">
                         <div className="board-card-title">{t.title}</div>
                         <div className="meta">

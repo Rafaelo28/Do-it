@@ -255,3 +255,86 @@ export const IconDone = (p: P) => (
     <path d="M10 15.5l1 1 9-9" />
   </Svg>
 );
+
+// ---------- Notizen und Editor ----------
+export const IconNote = (p: P) => (
+  <Svg {...p}>
+    <path d="M6 3h9l4 4v12.5A1.5 1.5 0 0 1 17.5 21h-11A1.5 1.5 0 0 1 5 19.5v-15A1.5 1.5 0 0 1 6.5 3Z" />
+    <path d="M14.5 3v4.5H19M8.5 12h7M8.5 16h5" />
+  </Svg>
+);
+export const IconBold = (p: P) => (
+  <Svg {...p} strokeWidth={2.4}>
+    <path d="M7 5h6a3.5 3.5 0 0 1 0 7H7zM7 12h7a3.5 3.5 0 0 1 0 7H7z" />
+  </Svg>
+);
+export const IconItalic = (p: P) => (
+  <Svg {...p}>
+    <path d="M14 5h-4M14 19h-4M14.5 5l-5 14" />
+  </Svg>
+);
+export const IconStrike = (p: P) => (
+  <Svg {...p}>
+    <path d="M4 12h16M16.5 7.5C16 5.9 14.3 5 12.2 5 9.6 5 8 6.3 8 8.1c0 1.4.9 2.4 2.6 3M8 16c.5 1.8 2.3 3 4.6 3 2.6 0 4.4-1.3 4.4-3.3 0-.9-.3-1.6-.9-2.2" />
+  </Svg>
+);
+export const IconListBullet = (p: P) => (
+  <Svg {...p}>
+    <path d="M9 6h11M9 12h11M9 18h11" />
+    <circle cx="4.5" cy="6" r="1" fill="currentColor" />
+    <circle cx="4.5" cy="12" r="1" fill="currentColor" />
+    <circle cx="4.5" cy="18" r="1" fill="currentColor" />
+  </Svg>
+);
+export const IconListOrdered = (p: P) => (
+  <Svg {...p}>
+    <path d="M10 6h10M10 12h10M10 18h10M4 4.5l1.5-.8V8.5M3.8 14.2c.4-.6 2.2-.9 2.2.4 0 .9-2.2 1.9-2.2 3.4H6" />
+  </Svg>
+);
+export const IconListCheck = (p: P) => (
+  <Svg {...p}>
+    <path d="M12 6h8M12 12h8M12 18h8" />
+    <rect x="3.5" y="3.5" width="5" height="5" rx="1.2" />
+    <path d="m4.6 6 1.2 1.2 2-2.2" />
+    <rect x="3.5" y="9.5" width="5" height="5" rx="1.2" />
+    <rect x="3.5" y="15.5" width="5" height="5" rx="1.2" />
+  </Svg>
+);
+export const IconQuote = (p: P) => (
+  <Svg {...p}>
+    <path d="M5 4v16M9.5 8h9.5M9.5 12h9.5M9.5 16h6" />
+  </Svg>
+);
+export const IconCode = (p: P) => (
+  <Svg {...p}>
+    <path d="m8 7-5 5 5 5M16 7l5 5-5 5M13.5 4l-3 16" />
+  </Svg>
+);
+export const IconRule = (p: P) => (
+  <Svg {...p}>
+    <path d="M3 12h18" />
+  </Svg>
+);
+export const IconUndo = (p: P) => (
+  <Svg {...p}>
+    <path d="M9 14 4 9l5-5" />
+    <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+  </Svg>
+);
+export const IconRedo = (p: P) => (
+  <Svg {...p}>
+    <path d="m15 14 5-5-5-5" />
+    <path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
+  </Svg>
+);
+export const IconPin = (p: P) => (
+  <Svg {...p}>
+    <path d="M9 3h6l-1 6 4 3v2H6v-2l4-3zM12 14v7" />
+  </Svg>
+);
+export const IconTaskAdd = (p: P) => (
+  <Svg {...p}>
+    <circle cx="9" cy="12" r="6" />
+    <path d="m6.5 12 1.8 1.8 3.2-3.4M18 8v8M14 12h8" />
+  </Svg>
+);

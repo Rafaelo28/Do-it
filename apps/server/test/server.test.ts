@@ -101,6 +101,7 @@ const mallory = new Client('https://evil.example');
 let annaInbox = '';
 let annaId = '';
 let benId = '';
+let sharedNote = '';
 const haushalt = uuidv7();
 const task1 = uuidv7();
 
@@ -325,6 +326,34 @@ describe('Server', () => {
     expect(await processBriefings(db, push, now)).toBe(0);
   });
 
+  it('Notizen: im geteilten Projekt gemeinsam, im Eingang privat', async () => {
+    const shared = uuidv7();
+    const own = uuidv7();
+    const now = new Date().toISOString();
+    const body = `# Putzplan\n\n- [ ] Fenster\n\n[[task:${task1}]]\n`;
+    const r = await anna.push([
+      { type: 'note', id: shared, data: { projectId: haushalt, title: 'Putzplan', body, createdBy: benId, createdAt: now, updatedAt: now } },
+      { type: 'note', id: own, data: { projectId: annaInbox, title: 'Tagebuch', body: 'geheim', createdAt: now, updatedAt: now } },
+    ]);
+    expect(r.json.rejected).toEqual([]);
+    // Ben sieht nur die Notiz im geteilten Projekt; "createdBy" setzt der Server
+    const snap = await ben.pull(0, haushalt);
+    expect(obj(snap.json, shared)?.data).toMatchObject({ title: 'Putzplan', body, createdBy: annaId, pinned: false });
+    expect(obj((await ben.pull()).json, own)).toBeUndefined();
+    // Ben bearbeitet die geteilte Notiz, darf aber nicht in Annas Eingang schreiben oder verschieben
+    expect((await ben.push([{ type: 'note', id: shared, data: { body: body + 'Ben war hier', updatedAt: now } }])).json.rejected).toEqual([]);
+    expect((await ben.push([{ type: 'note', id: own, data: { title: 'Hack' } }])).json.rejected).toHaveLength(1);
+    expect((await ben.push([{ type: 'note', id: uuidv7(), data: { projectId: annaInbox, title: 'x', createdAt: now, updatedAt: now } }])).json.rejected[0]?.reason).toMatch(
+      /Schreibrechte/,
+    );
+    expect((await ben.push([{ type: 'note', id: shared, data: { projectId: annaInbox } }])).json.rejected).toHaveLength(1);
+    expect(obj((await anna.pull(0, haushalt)).json, shared)?.data.body).toContain('Ben war hier');
+    // zu groß
+    const big = await anna.push([{ type: 'note', id: uuidv7(), data: { projectId: annaInbox, body: 'x'.repeat(200_001), createdAt: now, updatedAt: now } }]);
+    expect(big.json.rejected).toHaveLength(1);
+    sharedNote = shared;
+  });
+
   it('Projekt löschen löscht Inhalte; Mitglieder bekommen Grabsteine', async () => {
     const cursor = (await ben.pull()).json.cursor;
     const res = await anna.push([{ type: 'project', id: haushalt, op: 'delete' }]);
@@ -332,6 +361,7 @@ describe('Server', () => {
     const p = await ben.pull(cursor);
     expect(p.json.projectIds).not.toContain(haushalt);
     expect(obj(p.json, task1)?.deleted).toBe(true);
+    expect(obj(p.json, sharedNote)?.deleted).toBe(true);
     const inboxDelete = await anna.push([{ type: 'project', id: annaInbox, op: 'delete' }]);
     expect(inboxDelete.json.rejected).toHaveLength(1);
   });

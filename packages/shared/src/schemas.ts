@@ -86,6 +86,18 @@ export const commentSchema = z.strictObject({
   createdAt: isoSchema,
 });
 
+/** Notiz (Markdown). Eingebettete Aufgaben stehen als eigene Zeile "[[task:<id>]]" im Text. */
+export const noteSchema = z.strictObject({
+  projectId: idSchema,
+  title: z.string().max(200),
+  body: z.string().max(200_000),
+  pinned: z.boolean(),
+  archived: z.boolean(),
+  createdBy: idSchema.nullable(),
+  createdAt: isoSchema,
+  updatedAt: isoSchema,
+});
+
 export const OBJECT_SCHEMAS = {
   project: projectSchema,
   section: sectionSchema,
@@ -93,6 +105,7 @@ export const OBJECT_SCHEMAS = {
   label: labelSchema,
   reminder: reminderSchema,
   comment: commentSchema,
+  note: noteSchema,
 } as const satisfies Record<ObjectType, z.ZodType>;
 
 export const settingsSchema = z.strictObject({

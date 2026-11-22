@@ -286,6 +286,28 @@ describe('Parser-Details', () => {
     expect(r.spans).toEqual([{ start: 0, end: 5, type: 'project', text: 'Rasen', implicit: true }]);
   });
 
+  it('Projektnamen mit Emoji oder Zeichen: Kurzform und Abkürzung werden ganz entfernt', () => {
+    for (const name of ['🏡 Privat', 'Privat 🏡', '🏠Privat']) {
+      const c: ParseContext = { ...ctx, projects: [...ctx.projects!, { id: 'p-privat', name }] };
+      for (const input of ['Wäsche waschen .privat', 'Wäsche waschen .priv', '.privat Wäsche waschen', 'Wäsche waschen #privat', 'Wäsche .priv waschen', 'Wäsche waschen priv', 'Wäsche priv waschen', 'priv wäsche waschen']) {
+        const r = parseTask(input, c);
+        expect([input, name, r.title, r.projectId]).toEqual([input, name, 'Wäsche waschen', 'p-privat']);
+      }
+    }
+    const fam: ParseContext = { ...ctx, projects: [...ctx.projects!, { id: 'p-fam', name: 'Privat & Familie' }] };
+    expect(parseTask('Geschenk kaufen #Privat & Familie', fam)).toMatchObject({ title: 'Geschenk kaufen', projectId: 'p-fam' });
+    expect(parseTask('Geschenk kaufen .privat', fam)).toMatchObject({ title: 'Geschenk kaufen', projectId: 'p-fam' });
+  });
+
+  it('Wortformen eines Projekts bleiben im Satz, Abkürzungen nicht', () => {
+    const c: ParseContext = { ...ctx, projects: [...ctx.projects!, { id: 'p-kinder', name: 'Kinder' }, { id: 'p-termine', name: 'Termine' }] };
+    // "Kind" ist eine Wortform von "Kinder", kein Kürzel
+    expect(parseTask('mit Kind zum Arzt', c)).toMatchObject({ title: 'Mit Kind zum Arzt', projectId: 'p-kinder' });
+    expect(parseTask('Termin beim Friseur machen', c)).toMatchObject({ title: 'Termin beim Friseur machen', projectId: 'p-termine' });
+    // "Gesu" ist zu kurz für ein Wort-Kürzel, aber ".ges" als Kurzform klappt
+    expect(parseTask('Zahnarzt anrufen .ges', ctx)).toMatchObject({ title: 'Zahnarzt anrufen', projectId: 'p-gesundheit' });
+  });
+
   it('ignorierte Stellen bleiben Text', () => {
     const r = parseTask('Freitag Bericht', { ...ctx, ignore: ['freitag'] });
     expect(r.dueDate).toBeNull();

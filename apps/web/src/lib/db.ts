@@ -4,6 +4,7 @@ import type {
   MemberInfo,
   Me,
   Mutation,
+  NoteData,
   ObjectType,
   ProjectData,
   ReminderData,
@@ -19,6 +20,7 @@ export type Task = WithId<TaskData>;
 export type Label = WithId<LabelData>;
 export type Reminder = WithId<ReminderData>;
 export type Comment = WithId<CommentData>;
+export type Note = WithId<NoteData>;
 
 export interface OutboxEntry {
   seq?: number;
@@ -42,6 +44,7 @@ export class DoItDb extends Dexie {
   labels!: Table<Label, string>;
   reminders!: Table<Reminder, string>;
   comments!: Table<Comment, string>;
+  notes!: Table<Note, string>;
   outbox!: Table<OutboxEntry, number>;
   meta!: Table<MetaEntry, string>;
 
@@ -57,6 +60,7 @@ export class DoItDb extends Dexie {
       outbox: '++seq, id',
       meta: 'key',
     });
+    this.version(2).stores({ notes: 'id, projectId' });
   }
 
   tableFor(type: ObjectType): Table<WithId<Record<string, unknown>>, string> {
@@ -67,6 +71,7 @@ export class DoItDb extends Dexie {
       label: this.labels,
       reminder: this.reminders,
       comment: this.comments,
+      note: this.notes,
     } as const;
     return map[type] as unknown as Table<WithId<Record<string, unknown>>, string>;
   }

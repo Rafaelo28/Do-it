@@ -8,6 +8,11 @@ import {
   formatDateLong,
   formatDateRelative,
   generateKeyBetween,
+  markdownToText,
+  noteTaskIds,
+  noteTitle,
+  TASK_REF_LINE,
+  type NoteData,
   occurrencesBetween,
   parseFilter,
   type FilterContext,
@@ -43,6 +48,14 @@ interface TaskRow {
   is_inbox: boolean;
 }
 
+interface NoteRow {
+  id: string;
+  project_id: string;
+  data: NoteData;
+  project_name: string;
+  is_inbox: boolean;
+}
+
 interface ProjectRow {
   id: string;
   name: string;
@@ -57,6 +70,7 @@ const INSTRUCTIONS = `Do-it ist die selbst gehostete Todo-App des Nutzers (Deuts
 - Termine (Arzt, Treffen …) mit add_tasks und "event": true eintragen; sie stehen im Kalender und werden nicht abgehakt.
 - Neue Aufgaben mit add_tasks anlegen. Das Feld "text" darf natürliche Sprache enthalten wie in der App, z. B. "morgen 15 Uhr Zahnarzt anrufen #Gesundheit !1" oder "jeden Montag Müll rausbringen +Ben". Do-it erkennt Datum, Uhrzeit, Wiederholung, Projekt (#), Label (@), Person (+) und Priorität (!1–!4) selbst.
 - IDs aus den Ergebnissen für complete_tasks, update_task, add_comment und delete_task verwenden.
+- Notizen (Markdown) mit find_notes suchen und mit get_note lesen; mit add_note anlegen und mit update_note ändern oder ergänzen. Eingebettete Aufgaben stehen dort als echte Aufgaben mit ID.
 - Ein fertiges Briefing mit post_briefing speichern: Es erscheint in der App und als Benachrichtigung auf den Geräten des Nutzers.
 - Antworte dem Nutzer auf Deutsch.`;
 
@@ -121,6 +135,18 @@ async function visibleTasks(db: Db, userId: string, where = 'TRUE', params: unkn
      JOIN objects p ON p.id = t.project_id AND NOT p.deleted
      WHERE t.type = 'task' AND NOT t.deleted AND (${where})
      ORDER BY t.data->>'dueDate' NULLS LAST, t.data->>'dueTime' NULLS LAST, (t.data->>'priority')::int, t.data->>'sortKey'`,
+    [userId, ...params],
+  );
+}
+
+async function visibleNotes(db: Db, userId: string, where = 'TRUE', params: unknown[] = []): Promise<NoteRow[]> {
+  return db.query<NoteRow>(
+    `SELECT n.id, n.project_id, n.data, p.data->>'name' AS project_name, COALESCE((p.data->>'isInbox')::boolean, false) AS is_inbox
+     FROM objects n
+     JOIN project_members pm ON pm.project_id = n.project_id AND pm.user_id = $1
+     JOIN objects p ON p.id = n.project_id AND NOT p.deleted
+     WHERE n.type = 'note' AND NOT n.deleted AND (${where})
+     ORDER BY COALESCE((n.data->>'pinned')::boolean, false) DESC, n.data->>'updatedAt' DESC`,
     [userId, ...params],
   );
 }
@@ -621,6 +647,116 @@ function buildServer(deps: Deps, auth: BearerAuth): McpServer {
         { type: 'comment', id: uuidv7(), op: 'put', data: { taskId: a.task_id, body: a.text, authorId: user.id, createdAt: new Date().toISOString() } },
       ]);
       return err ? fail(`Abgelehnt: ${err}`) : text('Kommentar gespeichert.');
+    },
+  );
+
+  server.registerTool(
+    'find_notes',
+    {
+      title: 'Notizen suchen',
+      description: 'Listet die Notizen des Nutzers (neueste zuerst), optional gefiltert nach Suchbegriff oder Projekt. Den Inhalt liefert get_note.',
+      inputSchema: {
+        query: z.string().max(200).optional().describe('Suchbegriff in Titel und Text'),
+        project: z.string().max(120).optional().describe('Projektname'),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async (a) => {
+      let notes = await visibleNotes(db, user.id);
+      if (a.project) {
+        const p = findProject(await visibleProjects(db, user.id), a.project);
+        if (!p) return fail(`Projekt „${a.project}“ nicht gefunden.`);
+        notes = notes.filter((n) => n.project_id === p.id);
+      }
+      if (a.query?.trim()) {
+        const q = fold(a.query.trim());
+        notes = notes.filter((n) => fold(`${n.data.title}\n${markdownToText(n.data.body)}`).includes(q));
+      }
+      if (!notes.length) return text('Keine passenden Notizen.');
+      const today = localNow(user).today;
+      return text(
+        notes
+          .slice(0, 40)
+          .map((n) => {
+            const updated = formatDateRelative(zonedParts(new Date(n.data.updatedAt), user.timezone).date, today);
+            const snippet = markdownToText(n.data.body).slice(0, 120);
+            return `- ${n.data.pinned ? '[angeheftet] ' : ''}${noteTitle(n.data)} · ${n.is_inbox ? 'Eingang' : `#${n.project_name}`} · bearbeitet ${updated}${snippet ? ` · „${snippet}“` : ''} (id: ${n.id})`;
+          })
+          .join('\n'),
+      );
+    },
+  );
+
+  server.registerTool(
+    'get_note',
+    {
+      title: 'Notiz lesen',
+      description: 'Liefert eine Notiz als Markdown. Eingebettete Aufgaben erscheinen als Checklisten-Zeile mit Status, Fälligkeit und Aufgaben-ID.',
+      inputSchema: { id: z.string().uuid() },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ id }) => {
+      const n = (await visibleNotes(db, user.id, 'n.id = $2', [id]))[0];
+      if (!n) return fail('Notiz nicht gefunden.');
+      const ids = noteTaskIds(n.data.body);
+      const tasks = ids.length ? await visibleTasks(db, user.id, 't.id = ANY($2::uuid[])', [ids]) : [];
+      const byId = new Map(tasks.map((t) => [t.id, t]));
+      const today = localNow(user).today;
+      const body = n.data.body.replace(TASK_REF_LINE, (_l, tid: string) => {
+        const t = byId.get(tid.toLowerCase());
+        if (!t) return '- [ ] (Aufgabe gelöscht oder nicht sichtbar)';
+        const due = t.data.dueDate ? ` · fällig ${formatDateRelative(t.data.dueDate, today)}${t.data.dueTime ? ` ${t.data.dueTime}` : ''}` : '';
+        return `- [${t.data.completedAt ? 'x' : ' '}] ${t.data.title}${due} (Aufgabe, id: ${t.id})`;
+      });
+      return text(`# ${noteTitle(n.data)}\nProjekt: ${n.is_inbox ? 'Eingang' : n.project_name}\n\n${body.trim()}`);
+    },
+  );
+
+  server.registerTool(
+    'add_note',
+    {
+      title: 'Notiz anlegen',
+      description: 'Legt eine Notiz an (Markdown: Überschriften, Listen, Checklisten mit "- [ ]", **fett**). Ohne Projekt landet sie im Eingang.',
+      inputSchema: {
+        title: z.string().min(1).max(200),
+        text: z.string().max(100_000).default(''),
+        project: z.string().max(120).optional(),
+      },
+    },
+    async (a) => {
+      if (!canWrite) return denied();
+      const projects = await visibleProjects(db, user.id);
+      const p = a.project ? findProject(projects, a.project) : projects.find((x) => x.is_inbox);
+      if (!p) return fail(`Projekt „${a.project}“ nicht gefunden.`);
+      const id = uuidv7();
+      const now = new Date().toISOString();
+      const err = await apply([{ type: 'note', id, op: 'put', data: { projectId: p.id, title: a.title, body: a.text, createdAt: now, updatedAt: now } }]);
+      return err ? fail(`Abgelehnt: ${err}`) : text(`Notiz „${a.title}“ angelegt (id: ${id}).`);
+    },
+  );
+
+  server.registerTool(
+    'update_note',
+    {
+      title: 'Notiz ändern',
+      description: 'Ändert Titel oder Text einer Notiz. Mit "append" wird Text unten angehängt (z. B. weitere Punkte einer Liste), mit "text" der ganze Inhalt ersetzt.',
+      inputSchema: {
+        id: z.string().uuid(),
+        title: z.string().max(200).optional(),
+        text: z.string().max(100_000).optional().describe('ersetzt den ganzen Inhalt – eingebettete Aufgaben ([[task:…]]-Zeilen) dabei erhalten'),
+        append: z.string().max(20_000).optional(),
+      },
+    },
+    async (a) => {
+      if (!canWrite) return denied();
+      const n = (await visibleNotes(db, user.id, 'n.id = $2', [a.id]))[0];
+      if (!n) return fail('Notiz nicht gefunden.');
+      const data: Record<string, unknown> = { updatedAt: new Date().toISOString() };
+      if (a.title !== undefined) data.title = a.title;
+      if (a.text !== undefined) data.body = a.text;
+      if (a.append) data.body = `${String(data.body ?? n.data.body).replace(/\s+$/, '')}\n\n${a.append}`;
+      const err = await apply([{ type: 'note', id: a.id, op: 'put', data }]);
+      return err ? fail(`Abgelehnt: ${err}`) : text(`Notiz „${noteTitle({ title: String(data.title ?? n.data.title), body: String(data.body ?? n.data.body) })}“ gespeichert.`);
     },
   );
 

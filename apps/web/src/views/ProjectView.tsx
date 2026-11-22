@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useLocation } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import { IconSettings, IconUser } from '../components/Icons';
 import { QuickAdd } from '../components/QuickAdd';
 import { TaskList } from '../components/TaskList';
@@ -18,6 +18,8 @@ import { AgendaList, useEvents } from '../components/Agenda';
 import { LayoutSwitch } from '../components/LayoutSwitch';
 import { LayoutBody } from './Layouted';
 import { Select } from '../components/Select';
+import { useNotes } from '../lib/notes';
+import { IconNote } from '../components/Icons';
 
 const COLORS = ['#0f8b6c', '#3e63dd', '#e5484d', '#f76b15', '#8e4ec6', '#12a594', '#d6409f', '#978365', '#5b5bd6', '#30a46c'];
 
@@ -35,6 +37,7 @@ export function ProjectView({ id }: { id: string }) {
   const upcomingEvents = useEvents(today, addDays(today, 60), (t) => t.projectId === id);
   const nextEvents = upcomingEvents.filter((e, i) => upcomingEvents.findIndex((x) => x.task.id === e.task.id) === i).slice(0, 8);
   const layout = pref.layout ?? 'list';
+  const noteCount = (useNotes() ?? []).filter((n) => n.projectId === id && !n.archived).length;
 
   if (!project) return <div className="page">{loaded && <div className="empty">Projekt nicht gefunden.</div>}</div>;
 
@@ -57,6 +60,10 @@ export function ProjectView({ id }: { id: string }) {
         )}
         <div className="actions">
           <LayoutSwitch value={layout} onChange={(l) => setPref({ layout: l })} />
+          <Link href={`/notes?project=${id}`} className="icon-btn note-link" aria-label={`Notizen zu diesem Projekt (${noteCount})`} title="Notizen zu diesem Projekt">
+            <IconNote />
+            {noteCount > 0 && <span className="note-count">{noteCount}</span>}
+          </Link>
           {!project.isInbox && (
             <button className="icon-btn" aria-label="Projekt-Einstellungen" onClick={() => setSettings(true)}>
               <IconSettings />
