@@ -606,7 +606,13 @@ button.chip:hover {
   border-radius: var(--r-xs);
 }
 
-.task:hover {
+@media (hover: hover) {
+  .task:hover {
+    background: var(--hover);
+  }
+}
+
+.task:active {
   background: var(--hover);
 }
 
@@ -615,6 +621,7 @@ button.chip:hover {
 }
 
 .check {
+  position: relative;
   flex: none;
   width: 22px;
   height: 22px;
@@ -630,10 +637,71 @@ button.chip:hover {
   transition: background 0.15s;
 }
 
-.check:hover,
+/* größere Trefferfläche als der sichtbare Kreis (Finger) */
+.check::before {
+  content: '';
+  position: absolute;
+  inset: -10px;
+  border-radius: 50%;
+}
+
 .check.done {
   background: var(--pc, var(--p4));
   color: var(--surface);
+}
+
+/* Nur mit Maus: auf Touch-Geräten bliebe der Hover-Zustand nach dem Tippen
+   an der Stelle hängen und färbte die nächste Aufgabe ein */
+@media (hover: hover) {
+  .check:hover {
+    background: var(--pc, var(--p4));
+    color: var(--surface);
+  }
+}
+
+.check.completing {
+  animation: check-pop 0.28s ease-out;
+}
+
+@keyframes check-pop {
+  0% {
+    transform: scale(0.82);
+  }
+  55% {
+    transform: scale(1.18);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.task:has(.check.completing) .task-title,
+.board-card:has(.check.completing) .board-card-title {
+  text-decoration: line-through;
+  color: var(--muted);
+  transition: color 0.2s;
+}
+
+/* Zeile klappt nach dem Abhaken weg */
+.task.collapsing,
+.board-card.collapsing {
+  overflow: hidden;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+  border-bottom-width: 0;
+  transition:
+    height 0.18s ease,
+    opacity 0.18s ease,
+    padding 0.18s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .check.completing {
+    animation: none;
+  }
 }
 
 .task-body {
@@ -729,10 +797,14 @@ button.chip:hover {
   opacity: 1;
 }
 
+/* Touch: Griff ganz rechts, damit er nicht neben dem Abhak-Kreis liegt */
 @media (hover: none) {
   .drag-handle {
-    opacity: 0.55;
-    width: 20px;
+    order: 99;
+    opacity: 0.5;
+    width: 30px;
+    height: 30px;
+    margin: -4px -6px -4px 0;
   }
 }
 

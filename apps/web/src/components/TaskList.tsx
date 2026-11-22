@@ -1,13 +1,13 @@
 import { isOverdue } from '@do-it/shared';
 import { memo, useMemo } from 'react';
 import { useLocation } from 'wouter';
-import { toggleTask } from '../lib/actions';
 import { useData } from '../lib/data';
 import type { Task } from '../lib/db';
 import { dragState, startDrag } from '../lib/dnd';
 import { syncState } from '../lib/sync';
 import { useNow } from '../lib/time';
-import { IconBell, IconCheck, IconClock, IconFlag, IconGrip, IconHash, IconRepeat, IconSubtasks, IconTag, IconCalendar } from './Icons';
+import { CheckButton } from './CheckButton';
+import { IconBell, IconClock, IconFlag, IconGrip, IconHash, IconRepeat, IconSubtasks, IconTag, IconCalendar } from './Icons';
 import { Avatar } from './Avatar';
 import { dueLabel, durationLabel, PRIORITY_COLOR } from './ui';
 
@@ -62,7 +62,6 @@ function sameTask(a: Task, b: Task): boolean {
 
 const TaskRow = memo(
   function TaskRow({ task, projectLabel, subCount, subDone, hasReminder, assigneeName, assigneeAvatar, today, nowTime, sub, sortable }: ItemProps) {
-    const me = syncState.select((s) => s.me);
     const [, navigate] = useLocation();
     const canDrag = sortable && !sub && !task.completedAt;
     const dragClass = dragState.select((s) =>
@@ -97,17 +96,7 @@ const TaskRow = memo(
             <IconCalendar size={14} />
           </span>
         ) : (
-          <button
-            className={`check ${task.completedAt ? 'done' : ''}`}
-            style={{ '--pc': PRIORITY_COLOR[task.priority] } as React.CSSProperties}
-            aria-label={task.completedAt ? 'Als offen markieren' : 'Erledigt'}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (me) void toggleTask(task, me);
-            }}
-          >
-            <IconCheck size={13} />
-          </button>
+          <CheckButton task={task} />
         )}
         <div className="task-body">
           <div className="task-title">{task.title}</div>

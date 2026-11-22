@@ -869,11 +869,14 @@ function explicitMarkers(c: Ctx, out: Cand[]): void {
   const { input } = c;
   const projects = [...(c.projects ?? [])].sort((a, b) => b.name.length - a.name.length);
 
+  // Emojis und Zeichen im Projektnamen ("🏡 Privat", "Privat & Familie") zählen beim Tippen nicht mit
+  const nameWords = (name: string) => name.replace(/[^\p{L}\p{N}\s\-_]+/gu, ' ').trim().split(/[\s\-_]+/).filter(Boolean);
   const matchProject = (rest: string): { id: string; name: string; len: number } | null => {
     for (const p of projects) {
       for (const name of [p.name, ...(p.aliases ?? [])]) {
-        const words = name.trim().split(/[\s\-_]+/).map((w) => escapeRe(w.toLowerCase()));
-        const re = new RegExp(`^${de(words.join('[\\s\\-_]+'))}(?![\\p{L}\\p{N}])`, 'iu');
+        const words = nameWords(name).map((w) => escapeRe(w.toLowerCase()));
+        if (!words.length) continue;
+        const re = new RegExp(`^${de(words.join('[^\\p{L}\\p{N}#@]{1,3}'))}(?![\\p{L}\\p{N}])`, 'iu');
         const mm = re.exec(rest);
         if (mm) return { id: p.id, name: p.name, len: mm[0].length };
       }
@@ -881,8 +884,8 @@ function explicitMarkers(c: Ctx, out: Cand[]): void {
     // Eindeutiger Anfang ab 3 Zeichen: ".ges" → Gesundheit
     const tok = /^[\p{L}\p{N}_\-]+/u.exec(rest)?.[0];
     if (!tok || tok.length < 3) return null;
-    const f = fold(tok).replace(/[\s\-_]+/g, '');
-    const hits = projects.filter((p) => !p.isInbox && [p.name, ...(p.aliases ?? [])].some((n) => fold(n).replace(/[\s\-_]+/g, '').startsWith(f)));
+    const f = fold(tok).replace(/[^\p{L}\p{N}]+/gu, '');
+    const hits = projects.filter((p) => !p.isInbox && [p.name, ...(p.aliases ?? [])].some((n) => fold(n).replace(/[^\p{L}\p{N}]+/gu, '').startsWith(f)));
     return hits.length === 1 ? { id: hits[0]!.id, name: hits[0]!.name, len: tok.length } : null;
   };
 
@@ -1326,7 +1329,11 @@ export function parseTask(input: string, context: ParseContext): ParseResult {
       result.projectId = ids[0]!;
       result.projectVia = matches.find((m) => m.id === ids[0])!.via;
       for (const m of matches.filter((x) => x.id === ids[0])) {
-        const strip = tagLikeRange(input, m, removed);
+        // Punkt oder # direkt davor: war als Kurzform gemeint, Zeichen mit entfernen
+        const marked = m.start > 0 && '.#'.includes(input[m.start - 1]!) && (m.start === 1 || /\s/.test(input[m.start - 2]!));
+        if (marked) result.projectVia = 'explicit';
+        // abgeschnittener Projektname ("priv" für Privat) ist kein Wort im Satz: immer entfernen
+        const strip: [number, number] | null = marked ? [m.start - 1, m.end] : m.fragment ? [m.start, m.end] : tagLikeRange(input, m, removed);
         if (strip) removed.push(strip);
         result.spans.push({ start: m.start, end: m.end, type: 'project', text: input.slice(m.start, m.end), ...(strip ? {} : { implicit: true }) });
       }

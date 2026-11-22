@@ -11,7 +11,12 @@ export interface ProjectMatch {
   end: number;
   via: 'name' | 'alias';
   tokens: number;
+  /** abgekürzt geschrieben ("priv" für "Privat") – keine Wortform, die im Satz stehen bleiben sollte */
+  fragment?: boolean;
 }
+
+/** typische Endungen: "Kind" zu "Kinder" oder "Termin" zu "Termine" ist eine Wortform, keine Abkürzung */
+const ENDINGS = new Set(['e', 'n', 's', 'r', 'm', 'en', 'er', 'es', 'em', 'ns', 'se']);
 
 /** Kleinschreibung, Umlaute ausgeschrieben, Akzente entfernt. */
 export function fold(s: string): string {
@@ -101,7 +106,11 @@ export function findImplicitProjects(input: string, blocked: [number, number][],
           }
         }
         if (ok) {
-          matches.push({ id: p.id, start: tokens[i]!.start, end: tokens[i + words.length - 1]!.end, via, tokens: words.length });
+          const fragment = words.some((w, k) => {
+            const t = tokens[i + k]!.word;
+            return t.length < w.length && w.startsWith(t) && !ENDINGS.has(w.slice(t.length));
+          });
+          matches.push({ id: p.id, start: tokens[i]!.start, end: tokens[i + words.length - 1]!.end, via, tokens: words.length, ...(fragment ? { fragment } : {}) });
         }
       }
     }
