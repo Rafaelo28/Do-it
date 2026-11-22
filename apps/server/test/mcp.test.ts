@@ -174,7 +174,22 @@ describe('Claude-Anbindung (OAuth + MCP)', () => {
   it('MCP: Werkzeuge auflisten, anlegen, Überblick, abhaken, Briefing', async () => {
     const client = await mcpClient(accessToken);
     const tools = (await client.listTools()).tools.map((t) => t.name).sort();
-    expect(tools).toEqual(['add_comment', 'add_tasks', 'complete_tasks', 'delete_task', 'find_tasks', 'get_completed', 'get_overview', 'list_projects', 'post_briefing', 'update_task']);
+    expect(tools).toEqual([
+      'add_comment',
+      'add_note',
+      'add_tasks',
+      'complete_tasks',
+      'delete_task',
+      'find_notes',
+      'find_tasks',
+      'get_completed',
+      'get_note',
+      'get_overview',
+      'list_projects',
+      'post_briefing',
+      'update_note',
+      'update_task',
+    ]);
     expect((await client.listPrompts()).prompts.map((p) => p.name)).toEqual(['tagesbriefing']);
 
     const added = textOf(
@@ -224,6 +239,19 @@ describe('Claude-Anbindung (OAuth + MCP)', () => {
     const pull = await req('GET', '/api/sync/pull?cursor=0');
     const titles = (pull.json.objects as { type: string; data: { title?: string } }[]).filter((o) => o.type === 'task').map((o) => o.data.title);
     expect(titles).toEqual(expect.arrayContaining(['Zahnarzt anrufen', 'Müll rausbringen', 'Steuer machen']));
+
+    // Notizen: anlegen, ergänzen, suchen, lesen – eingebettete Aufgaben mit Status
+    const steuer = /Steuer machen“ angelegt.*\(id: ([0-9a-f-]{36})\)/.exec(added)![1]!;
+    const created = textOf(await client.callTool({ name: 'add_note', arguments: { title: 'Urlaub', text: `## Packliste\n- [ ] Pass\n\n[[task:${steuer}]]\n[[task:${zahnarztId}]]`, project: 'Gesundheit' } }));
+    const noteId = /\(id: ([0-9a-f-]{36})\)/.exec(created)![1]!;
+    expect(textOf(await client.callTool({ name: 'update_note', arguments: { id: noteId, append: '- [ ] Sonnencreme' } }))).toContain('„Urlaub“ gespeichert');
+    expect(textOf(await client.callTool({ name: 'find_notes', arguments: { query: 'sonnencreme' } }))).toMatch(/- Urlaub · #Gesundheit · bearbeitet Heute/);
+    expect(textOf(await client.callTool({ name: 'find_notes', arguments: { project: 'Eingang' } }))).toBe('Keine passenden Notizen.');
+    const note = textOf(await client.callTool({ name: 'get_note', arguments: { id: noteId } }));
+    expect(note).toContain('# Urlaub\nProjekt: Gesundheit');
+    expect(note).toContain(`- [ ] Steuer machen (Aufgabe, id: ${steuer})`);
+    expect(note).toContain(`- [x] Zahnarzt anrufen · fällig Morgen 09:00 (Aufgabe, id: ${zahnarztId})`);
+    expect(note).toMatch(/- \[ \] Pass\n[\s\S]*- \[ \] Sonnencreme$/);
     void zonedParts;
     await client.close();
   });

@@ -27,6 +27,7 @@ import { TodayView, UpcomingView } from './views/Today';
 
 const SettingsView = lazy(() => import('./views/Settings').then((m) => ({ default: m.SettingsView })));
 const CalendarPage = lazy(() => import('./views/CalendarPage').then((m) => ({ default: m.CalendarPage })));
+const NotesPage = lazy(() => import('./views/Notes').then((m) => ({ default: m.NotesPage })));
 
 type Phase = 'loading' | 'setup' | 'login' | 'ready';
 
@@ -199,6 +200,13 @@ function Shell() {
             <Suspense fallback={<div className="page muted">Lade …</div>}>
               <CalendarPage />
             </Suspense>
+          </Route>
+          <Route path="/notes/:id?">
+            {(p) => (
+              <Suspense fallback={<div className="page muted">Lade …</div>}>
+                <NotesPage id={p.id} />
+              </Suspense>
+            )}
           </Route>
           <Route path="/f/:id">{(p) => <CustomFilterView id={p.id} key={p.id} />}</Route>
           <Route path="/filter/:name">{(p) => <FilterView name={p.name} />}</Route>

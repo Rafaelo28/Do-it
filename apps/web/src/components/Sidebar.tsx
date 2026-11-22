@@ -7,7 +7,7 @@ import { syncState } from '../lib/sync';
 import { Avatar } from './Avatar';
 import { FilterEditor, filterTasks, useFilterContext } from '../views/CustomFilter';
 import { useNow } from '../lib/time';
-import { IconCalendar, IconClock, IconDone, IconFilter, IconFlag, IconInbox, IconPlus, IconSearch, IconSettings, IconSparkle, IconTag, IconToday, IconUser } from './Icons';
+import { IconCalendar, IconNote, IconClock, IconDone, IconFilter, IconFlag, IconInbox, IconPlus, IconSearch, IconSettings, IconSparkle, IconTag, IconToday, IconUser } from './Icons';
 
 function NavLink({ href, icon, label, count, alert, onNavigate }: { href: string; icon: React.ReactNode; label: string; count?: number; alert?: boolean; onNavigate: () => void }) {
   const [location] = useLocation();
@@ -66,6 +66,7 @@ export function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () =>
       <NavLink href="/today" icon={<IconToday />} label="Heute" count={todayCount} alert={overdue} onNavigate={onNavigate} />
       <NavLink href="/upcoming" icon={<IconClock />} label="Demnächst" onNavigate={onNavigate} />
       <NavLink href="/calendar" icon={<IconCalendar />} label="Kalender" onNavigate={onNavigate} />
+      <NavLink href="/notes" icon={<IconNote />} label="Notizen" onNavigate={onNavigate} />
       <NavLink href="/done" icon={<IconDone />} label="Erledigt" onNavigate={onNavigate} />
       <NavLink href="/search" icon={<IconSearch />} label="Suchen" onNavigate={onNavigate} />
       <NavLink href="/briefings" icon={<IconSparkle />} label="Briefings" onNavigate={onNavigate} />

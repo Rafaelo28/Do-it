@@ -21,6 +21,7 @@ Selbst gehostete Todo-App für eine kleine Gruppe – Aufgaben in normaler Sprac
 - **Darstellungen** für jedes Projekt, Label und jeden Filter: Liste, Board (nach Abschnitt, Projekt, Priorität oder Fälligkeit), Kalender oder Tabelle – pro Person gespeichert.
 - **Eigene Filter** (bis 150) mit einer Abfragesprache auf Deutsch, die auch Todoist-Schreibweisen versteht: `(heute | überfällig) & p1`, `##Arbeit & 7 tage`, `deadline 14 tage`, `@einkaufen & !wiederkehrend`. Claude kann sie bei der Suche ebenfalls nutzen.
 - **Erscheinungsbild**: Hell, dunkel oder wie das Gerät, zehn Akzentfarben oder eine eigene, fünf Stile (Papier, Klar, Kühl, Warm, Tiefschwarz), Ecken, Dichte und Schriftgröße – auf allen Geräten gleich.
+- **Notizen** mit Markdown-Editor (Überschriften, Listen, Checklisten, Links, Code) – darin echte Aufgaben einbetten, die sich live abhaken lassen; eine Checkliste wird auf Knopfdruck zu Aufgaben (Datum & Co. werden erkannt). Notizen gehören zu einem Projekt und sind in geteilten Projekten gemeinsam bearbeitbar; Claude kann sie lesen und ergänzen.
 - **Startseite** frei wählbar: Heute, Eingang, Demnächst, Kalender, ein Projekt, Filter oder Label.
 - **Karma**: Punkte fürs Erledigen (mehr für wichtige und pünktliche Aufgaben), Tages- und Wochenziele, Serien und zehn Stufen vom Samenkorn bis zum Urwald. Freie Tage und Urlaub unterbrechen keine Serie.
 - **Profilbilder**: eigenes Bild hochladen und zuschneiden. Es erscheint bei Zuweisungen, Kommentaren und in der Erledigt-Übersicht.
@@ -36,7 +37,7 @@ Selbst gehostete Todo-App für eine kleine Gruppe – Aufgaben in normaler Sprac
 | `apps/server` | Fastify + PostgreSQL: Login, Sync, WebSocket, Push, Erinnerungs-Dienst |
 | `apps/web` | React-PWA mit IndexedDB, Service Worker und Sync-Client |
 | `deploy` | Dockerfile, Compose (App, Worker, DB, Backup, Cloudflare Tunnel), Skripte |
-| `docs` | [Bauplan](docs/BAUPLAN.md), [Betriebsanleitung](docs/betrieb.md), [Claude verbinden](docs/claude.md) |
+| `docs` | [Bauplan](docs/BAUPLAN.md), [Betriebsanleitung](docs/betrieb.md), [Claude verbinden](docs/claude.md), [Android-App (Plan)](docs/apk-bauplan.md) |
 
 ## Schnellstart (Server)
 

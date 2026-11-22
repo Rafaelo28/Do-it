@@ -1,5 +1,9 @@
 import { fold } from '@do-it/parser';
+import { markdownToText, noteTitle } from '@do-it/shared';
 import { useState } from 'react';
+import { Link } from 'wouter';
+import { IconNote } from '../components/Icons';
+import { useNotes } from '../lib/notes';
 import { QuickAdd } from '../components/QuickAdd';
 import { byDue, TaskList } from '../components/TaskList';
 import { useData } from '../lib/data';
@@ -40,6 +44,8 @@ export function SearchView() {
   const list = needle
     ? tasks.filter((t) => (done || !t.completedAt) && (fold(t.title).includes(needle) || fold(t.description).includes(needle) || t.labels.some((l) => fold(l).includes(needle)))).slice(0, 200)
     : [];
+  const allNotes = useNotes();
+  const notes = needle ? (allNotes ?? []).filter((n) => fold(`${n.title}\n${markdownToText(n.body)}`).includes(needle)).slice(0, 10) : [];
   return (
     <div className="page">
       <div className="page-head">
@@ -49,7 +55,19 @@ export function SearchView() {
       <label className="row small muted" style={{ marginTop: 8 }}>
         <input type="checkbox" checked={done} onChange={(e) => setDone(e.target.checked)} /> Erledigte einbeziehen
       </label>
-      {needle && !list.length && <div className="empty">Nichts gefunden.</div>}
+      {needle && !list.length && !notes.length && <div className="empty">Nichts gefunden.</div>}
+      {notes.length > 0 && (
+        <ul className="search-notes" aria-label="Notizen">
+          {notes.map((n) => (
+            <li key={n.id}>
+              <Link href={`/notes/${n.id}`}>
+                <IconNote size={16} />
+                <span>{noteTitle(n)}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
       <TaskList tasks={list} />
     </div>
   );

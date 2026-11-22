@@ -8,3 +8,4 @@ export * from './tasks';
 export * from './karma';
 export * from './filter';
 export { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
+export * from './notes';

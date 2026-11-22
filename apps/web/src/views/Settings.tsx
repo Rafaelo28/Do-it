@@ -23,6 +23,7 @@ import {
   IconFilter,
   IconFlag,
   IconInbox,
+  IconNote,
   IconInfo,
   IconLeaf,
   IconLink,
@@ -220,6 +221,7 @@ function StartPageSetting({ me }: { me: Me }) {
     ...(inbox ? [{ value: `/project/${inbox.id}`, label: 'Eingang', icon: <IconInbox size={15} /> }] : []),
     { value: '/upcoming', label: 'Demnächst', icon: <IconClock size={15} /> },
     { value: '/calendar', label: 'Kalender', icon: <IconCalendar size={15} /> },
+    { value: '/notes', label: 'Notizen', icon: <IconNote size={15} /> },
     { value: '/done', label: 'Erledigt', icon: <IconDone size={15} /> },
     ...(me.settings.karmaEnabled ? [{ value: '/karma', label: 'Karma', icon: <IconLeaf size={15} /> }] : []),
     ...projectOptions(projects)

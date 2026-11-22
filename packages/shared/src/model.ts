@@ -1,10 +1,10 @@
 import type { z } from 'zod';
-import type { commentSchema, labelSchema, projectSchema, recurrenceSchema, reminderSchema, sectionSchema, taskSchema } from './schemas';
+import type { commentSchema, labelSchema, noteSchema, projectSchema, recurrenceSchema, reminderSchema, sectionSchema, taskSchema } from './schemas';
 
 // Dieses Modul ist bewusst frei von Zod-Laufzeitcode, damit die Web-App die Bibliothek nicht mitladen muss.
 // Die Schemas selbst liegen in ./schemas (nur Server).
 
-export const OBJECT_TYPES = ['project', 'section', 'task', 'label', 'reminder', 'comment'] as const;
+export const OBJECT_TYPES = ['project', 'section', 'task', 'label', 'reminder', 'comment', 'note'] as const;
 export type ObjectType = (typeof OBJECT_TYPES)[number];
 
 export type Recurrence = z.infer<typeof recurrenceSchema>;
@@ -14,6 +14,7 @@ export type TaskData = z.infer<typeof taskSchema>;
 export type LabelData = z.infer<typeof labelSchema>;
 export type ReminderData = z.infer<typeof reminderSchema>;
 export type CommentData = z.infer<typeof commentSchema>;
+export type NoteData = z.infer<typeof noteSchema>;
 
 export interface ObjectDataMap {
   project: ProjectData;
@@ -22,6 +23,7 @@ export interface ObjectDataMap {
   label: LabelData;
   reminder: ReminderData;
   comment: CommentData;
+  note: NoteData;
 }
 
 /** Standardwerte für Felder, die beim Anlegen fehlen dürfen. */
@@ -51,6 +53,7 @@ export const OBJECT_DEFAULTS: { [K in ObjectType]: Partial<ObjectDataMap[K]> } =
   label: { color: null },
   reminder: { offsetMin: null, date: null, time: null },
   comment: {},
+  note: { title: '', body: '', pinned: false, archived: false, createdBy: null },
 };
 
 /** Objekte, die nur ihrem Besitzer gehören (nicht mit dem Projekt geteilt). */
@@ -119,7 +122,7 @@ export interface UserSettings {
 }
 
 /** erlaubte Startseiten (Pfade in der App) */
-export const START_PAGE_PATTERN = /^\/(today|upcoming|calendar|done|karma|project\/[\w-]{1,64}|f\/[\w-]{1,64}|filter\/(mine|p1|nodate|deadline)|label\/[^/?#\s]{1,200})$/;
+export const START_PAGE_PATTERN = /^\/(today|upcoming|calendar|done|karma|notes|project\/[\w-]{1,64}|f\/[\w-]{1,64}|filter\/(mine|p1|nodate|deadline)|label\/[^/?#\s]{1,200})$/;
 
 export const DEFAULT_SETTINGS: UserSettings = {
   morningTime: '08:00',

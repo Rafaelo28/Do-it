@@ -55,6 +55,7 @@ const IMMUTABLE: Partial<Record<ObjectType, string[]>> = {
   task: ['createdBy', 'createdAt'],
   reminder: ['taskId'],
   comment: ['taskId', 'authorId', 'createdAt'],
+  note: ['createdBy', 'createdAt'],
 };
 
 const PULL_LIMIT = 500;
@@ -246,6 +247,11 @@ export class SyncService {
       full.authorId = user.id;
       full.createdAt = now;
     }
+    if (type === 'note') {
+      full.createdBy = user.id;
+      full.createdAt ??= now;
+      full.updatedAt ??= now;
+    }
     const parsed = OBJECT_SCHEMAS[type].safeParse(full);
     if (!parsed.success) throw new Rejection(`Ungültige Daten: ${parsed.error.issues[0]?.path.join('.')} ${parsed.error.issues[0]?.message}`);
     const value = parsed.data as Record<string, unknown>;
@@ -258,6 +264,7 @@ export class SyncService {
         break;
       case 'section':
       case 'task':
+      case 'note':
         projectId = value.projectId as string;
         await this.requireWrite(q, roles, user.id, projectId);
         if (type === 'task') await this.checkTaskRefs(q, value as unknown as TaskData, projectId);
@@ -334,7 +341,7 @@ export class SyncService {
     if (!full.success) throw new Rejection(`Ungültige Daten: ${full.error.issues[0]?.message}`);
 
     let projectId = existing.project_id;
-    if ((existing.type === 'task' || existing.type === 'section') && merged.projectId !== existing.project_id) {
+    if ((existing.type === 'task' || existing.type === 'section' || existing.type === 'note') && merged.projectId !== existing.project_id) {
       projectId = merged.projectId as string;
       await this.requireWrite(q, roles, user.id, projectId);
       if (existing.type === 'task') {

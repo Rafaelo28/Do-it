@@ -37,6 +37,10 @@ export interface QuickAddProps {
   initialText?: string;
   placeholder?: string;
   onDone?: () => void;
+  /** nach dem Anlegen, mit der ID der neuen Aufgabe (z. B. zum Einbetten in eine Notiz) */
+  onCreated?: (taskId: string) => void;
+  /** Termin-Umschalter ausblenden */
+  noEvent?: boolean;
 }
 
 export function QuickAdd(props: QuickAddProps) {
@@ -121,13 +125,14 @@ export function QuickAdd(props: QuickAddProps) {
     try {
       // Direkt nach dem ersten Anmelden kennt das Gerät den Eingang evtl. noch nicht: kurz warten.
       const targetProject = baseProject || (await waitForInbox());
-      await createTaskFromParse(r, {
+      const id = await createTaskFromParse(r, {
         projectId: targetProject,
         sectionId: props.sectionId,
         parentId: props.parentId,
         me,
         defaults,
       });
+      props.onCreated?.(id);
       if (eventMode) toast(`Termin „${r.title}“ eingetragen`);
       const target = r.newProjectName ?? projectMap.get(r.projectId ?? baseProject)?.name;
       if ((r.projectId && r.projectId !== props.projectId) || r.newProjectName) toast(`Zu „${target}“ hinzugefügt`);
@@ -324,7 +329,7 @@ export function QuickAdd(props: QuickAddProps) {
 
       <div className="qa-foot">
         <Select label="Projekt" size="sm" value={effectiveProject} options={projectOptions(projects)} onChange={(v) => setManualProject(v)} />
-        {!props.parentId && (
+        {!props.parentId && !props.noEvent && (
           <button
             type="button"
             className={`chip toggle ${eventMode ? 'on' : ''}`}
