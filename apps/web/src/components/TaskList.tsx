@@ -7,7 +7,7 @@ import { dragState, startDrag } from '../lib/dnd';
 import { syncState } from '../lib/sync';
 import { useNow } from '../lib/time';
 import { CheckButton } from './CheckButton';
-import { IconBell, IconClock, IconFlag, IconGrip, IconHash, IconRepeat, IconSubtasks, IconTag, IconCalendar } from './Icons';
+import { IconBell, IconBellOff, IconClock, IconFlag, IconGrip, IconHash, IconRepeat, IconSubtasks, IconTag, IconCalendar } from './Icons';
 import { Avatar } from './Avatar';
 import { dueLabel, durationLabel, PRIORITY_COLOR } from './ui';
 
@@ -49,6 +49,7 @@ function sameTask(a: Task, b: Task): boolean {
       a.deadline === b.deadline &&
       a.durationMin === b.durationMin &&
       a.isEvent === b.isEvent &&
+      a.silent === b.silent &&
       a.priority === b.priority &&
       a.assigneeId === b.assigneeId &&
       a.projectId === b.projectId &&
@@ -119,9 +120,14 @@ const TaskRow = memo(
                 {subDone}/{subCount}
               </span>
             )}
-            {hasReminder && (
+            {hasReminder && !task.silent && (
               <span title="Erinnerung">
                 <IconBell size={12} />
+              </span>
+            )}
+            {task.silent && (
+              <span title="Stumm – keine Benachrichtigung">
+                <IconBellOff size={12} />
               </span>
             )}
             {task.labels.map((l) => (

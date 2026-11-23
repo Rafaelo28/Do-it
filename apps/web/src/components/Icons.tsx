@@ -76,6 +76,11 @@ export const IconBell = (p: P) => (
     <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0" />
   </Svg>
 );
+export const IconBellOff = (p: P) => (
+  <Svg {...p}>
+    <path d="M8.7 3.4A6 6 0 0 1 18 8c0 3.2.6 5.4 1.3 6.8M17 17H3s3-2 3-9c0-.6.1-1.2.3-1.8M10.3 21a1.9 1.9 0 0 0 3.4 0M3 3l18 18" />
+  </Svg>
+);
 export const IconTag = (p: P) => (
   <Svg {...p}>
     <path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" />

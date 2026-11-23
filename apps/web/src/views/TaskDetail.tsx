@@ -4,7 +4,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
 import { Avatar } from '../components/Avatar';
-import { IconBack, IconBell, IconCalendar, IconCheck, IconFlag, IconTrash, IconUser, IconX } from '../components/Icons';
+import { IconBack, IconBell, IconBellOff, IconCalendar, IconCheck, IconFlag, IconTrash, IconUser, IconX } from '../components/Icons';
 import { QuickAdd } from '../components/QuickAdd';
 import { TaskList } from '../components/TaskList';
 import { PRIORITY_COLOR, reminderLabel } from '../components/ui';
@@ -79,6 +79,20 @@ function Detail({ task }: { task: Task }) {
     if (!name || task.labels.some((l) => l.toLowerCase() === name.toLowerCase())) return;
     set({ labels: [...task.labels, name] });
     await ensureLabels([name]);
+  }
+
+  /** Benachrichtigungen an/aus – aus = stumm: Erinnerungen weg, nicht im Morgen-Briefing */
+  async function setNotify(on: boolean) {
+    if (!on) {
+      set({ silent: true });
+      for (const r of myReminders) await deleteReminder(r.id);
+      return;
+    }
+    set({ silent: false });
+    const auto = me?.settings.autoReminderMin;
+    if (!myReminders.length && task.dueDate && task.dueTime) {
+      await addReminder({ taskId: task.id, kind: 'relative', offsetMin: auto ?? 0, date: null, time: null });
+    }
   }
 
   async function addRem() {
@@ -332,39 +346,51 @@ function Detail({ task }: { task: Task }) {
       </div>
 
       <h2>
-        <IconBell size={16} /> Erinnerungen
+        {task.silent ? <IconBellOff size={16} /> : <IconBell size={16} />} Erinnerungen
       </h2>
-      <ul className="list-plain">
-        {myReminders.map((r) => (
-          <li key={r.id}>
-            <span style={{ flex: 1 }}>{r.kind === 'relative' ? reminderLabel(r.offsetMin) : `${formatDateRelative(r.date!, now.date)} ${r.time}`}</span>
-            <button className="icon-btn" aria-label="Erinnerung löschen" onClick={() => void deleteReminder(r.id)}>
-              <IconTrash size={16} />
+      <label className="row small notify-switch">
+        <EventSwitch value={!task.silent} disabled={readOnly} onChange={(on) => void setNotify(on)} />
+        {task.isEvent ? 'Benachrichtigung für diesen Termin' : 'Benachrichtigungen für diese Aufgabe'}
+      </label>
+      {task.silent ? (
+        <p className="small muted">
+          Stumm: keine Erinnerung und kein Hinweis im Morgen-Briefing. Im Kalender und in „Heute“ steht {task.isEvent ? 'der Termin' : 'die Aufgabe'} trotzdem.
+        </p>
+      ) : (
+        <>
+          <ul className="list-plain">
+            {myReminders.map((r) => (
+              <li key={r.id}>
+                <span style={{ flex: 1 }}>{r.kind === 'relative' ? reminderLabel(r.offsetMin) : `${formatDateRelative(r.date!, now.date)} ${r.time}`}</span>
+                <button className="icon-btn" aria-label="Erinnerung löschen" onClick={() => void deleteReminder(r.id)}>
+                  <IconTrash size={16} />
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="row" style={{ marginTop: 8 }}>
+            <Select
+              label="Erinnerung"
+              value={remKind}
+              options={[
+                { value: '0', label: 'Zur Fälligkeit' },
+                { value: '10', label: '10 Min. vorher' },
+                { value: '30', label: '30 Min. vorher' },
+                { value: '60', label: '1 Std. vorher' },
+                { value: '180', label: '3 Std. vorher' },
+                { value: '1440', label: '1 Tag vorher' },
+                { value: 'abs', label: 'Zu einem Zeitpunkt …' },
+              ]}
+              onChange={setRemKind}
+            />
+            {remKind === 'abs' && <input className="input" type="datetime-local" style={{ width: 'auto' }} value={remAt} onChange={(e) => setRemAt(e.target.value)} />}
+            <button className="btn" onClick={() => void addRem()} disabled={remKind !== 'abs' && !task.dueDate}>
+              Hinzufügen
             </button>
-          </li>
-        ))}
-      </ul>
-      <div className="row" style={{ marginTop: 8 }}>
-        <Select
-          label="Erinnerung"
-          value={remKind}
-          options={[
-            { value: '0', label: 'Zur Fälligkeit' },
-            { value: '10', label: '10 Min. vorher' },
-            { value: '30', label: '30 Min. vorher' },
-            { value: '60', label: '1 Std. vorher' },
-            { value: '180', label: '3 Std. vorher' },
-            { value: '1440', label: '1 Tag vorher' },
-            { value: 'abs', label: 'Zu einem Zeitpunkt …' },
-          ]}
-          onChange={setRemKind}
-        />
-        {remKind === 'abs' && <input className="input" type="datetime-local" style={{ width: 'auto' }} value={remAt} onChange={(e) => setRemAt(e.target.value)} />}
-        <button className="btn" onClick={() => void addRem()} disabled={remKind !== 'abs' && !task.dueDate}>
-          Hinzufügen
-        </button>
-      </div>
-      {!task.dueDate && remKind !== 'abs' && <p className="small muted">Für Erinnerungen „vorher“ braucht die Aufgabe ein Datum.</p>}
+          </div>
+          {!task.dueDate && remKind !== 'abs' && <p className="small muted">Für Erinnerungen „vorher“ braucht die Aufgabe ein Datum.</p>}
+        </>
+      )}
 
       <h2>Unteraufgaben</h2>
       <TaskList tasks={children} showProject={false} showSubtasks={false} />

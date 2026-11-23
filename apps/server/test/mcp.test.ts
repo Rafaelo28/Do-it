@@ -204,7 +204,8 @@ describe('Claude-Anbindung (OAuth + MCP)', () => {
     const zahnarztId = /Zahnarzt anrufen“ angelegt.*\(id: ([0-9a-f-]{36})\)/.exec(added)![1]!;
 
     const overview = textOf(await client.callTool({ name: 'get_overview', arguments: {} }));
-    expect(overview).toMatch(/## Heute \(1\)\n- Zahnarzt anrufen · fällig Heute 23:30 · P1 · #Gesundheit/);
+    // montags ist "jeden Montag Müll rausbringen" ebenfalls heute fällig
+    expect(overview).toMatch(/## Heute \([12]\)\n- Zahnarzt anrufen · fällig Heute 23:30 · P1 · #Gesundheit/);
     expect(overview).toContain('Gesundheit: 1 offen');
     expect(overview).toMatch(/## Karma\n- Stufe 1 \(Samenkorn\), 0 Punkte/);
 

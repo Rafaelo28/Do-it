@@ -109,7 +109,12 @@ export async function createTaskFromParse(r: ParseResult, opts: CreateOptions): 
     createdBy: opts.me.id,
     createdAt: new Date().toISOString(),
   };
+  // stumm ("ohne Erinnerung" oder Schalter beim Anlegen): keine Erinnerungen
+  const silent = !!(r.silent || opts.defaults?.silent);
+  if (silent) data.silent = true;
+  else delete data.silent;
   await sync.mutate('task', id, 'put', data as Record<string, unknown>);
+  if (silent) return id;
   const reminders: ReminderData[] = r.reminders.map((rem) =>
     rem.kind === 'relative'
       ? { taskId: id, kind: 'relative', offsetMin: rem.offsetMin, date: null, time: null }

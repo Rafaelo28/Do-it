@@ -3,7 +3,7 @@ import { Link } from 'wouter';
 import { useData } from '../lib/data';
 import type { Task } from '../lib/db';
 import { syncState } from '../lib/sync';
-import { IconRepeat } from './Icons';
+import { IconBellOff, IconRepeat } from './Icons';
 
 export interface AgendaItem {
   task: Task;
@@ -39,6 +39,7 @@ export function AgendaList({ items, showDate }: { items: AgendaItem[]; showDate?
                 {task.dueTime ? `${task.dueTime}${end ? `–${end}` : ''}` : 'ganztägig'}
               </span>
               <span className="agenda-title">{task.title}</span>
+              {task.silent && <IconBellOff size={12} aria-label="stumm" />}
               {task.recurrence && <IconRepeat size={12} />}
             </Link>
           </li>

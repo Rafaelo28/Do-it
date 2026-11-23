@@ -67,7 +67,7 @@ interface ProjectRow {
 const INSTRUCTIONS = `Do-it ist die selbst gehostete Todo-App des Nutzers (Deutsch).
 - Für Zusammenfassungen und Tagesbriefings zuerst get_overview aufrufen, bei Bedarf get_completed für Erledigtes.
 - Gezielte Suchen mit find_tasks und "filter" in der Filtersprache, z. B. "(heute | überfällig) & p1" oder "deadline 7 tage".
-- Termine (Arzt, Treffen …) mit add_tasks und "event": true eintragen; sie stehen im Kalender und werden nicht abgehakt.
+- Termine (Arzt, Treffen …) mit add_tasks und "event": true eintragen; sie stehen im Kalender und werden nicht abgehakt. Regelmäßige Termine ohne Benachrichtigung (z. B. Stundenplan) zusätzlich mit "silent": true.
 - Neue Aufgaben mit add_tasks anlegen. Das Feld "text" darf natürliche Sprache enthalten wie in der App, z. B. "morgen 15 Uhr Zahnarzt anrufen #Gesundheit !1" oder "jeden Montag Müll rausbringen +Ben". Do-it erkennt Datum, Uhrzeit, Wiederholung, Projekt (#), Label (@), Person (+) und Priorität (!1–!4) selbst.
 - IDs aus den Ergebnissen für complete_tasks, update_task, add_comment und delete_task verwenden.
 - Notizen (Markdown) mit find_notes suchen und mit get_note lesen; mit add_note anlegen und mit update_note ändern oder ergänzen. Eingebettete Aufgaben stehen dort als echte Aufgaben mit ID.
@@ -401,6 +401,7 @@ function buildServer(deps: Deps, auth: BearerAuth): McpServer {
               project: z.string().max(120).optional().describe('Projektname; überschreibt #Projekt im Text'),
               parent_id: z.string().uuid().optional().describe('ID einer Hauptaufgabe für Unteraufgaben'),
               event: z.boolean().optional().describe('true: als Termin im Kalender eintragen (kein To-do, wird nicht abgehakt); braucht ein Datum'),
+              silent: z.boolean().optional().describe('true: ohne Benachrichtigung (keine Erinnerung, nicht im Morgen-Briefing), z. B. für einen Stundenplan'),
             }),
           )
           .min(1)
@@ -483,11 +484,12 @@ function buildServer(deps: Deps, auth: BearerAuth): McpServer {
             sortKey: generateKeyBetween(last?.k ?? null, null),
             createdAt: new Date().toISOString(),
             ...(item.event ? { isEvent: true, priority: 4 } : {}),
+            ...(item.silent || r.silent ? { silent: true } : {}),
           },
         });
-        const reminders = [...r.reminders];
+        const reminders = item.silent || r.silent ? [] : [...r.reminders];
         const auto = settingsOf(user).autoReminderMin;
-        if (!reminders.length && auto !== null && r.dueDate && r.dueTime) reminders.push({ kind: 'relative', offsetMin: auto });
+        if (!reminders.length && !item.silent && !r.silent && auto !== null && r.dueDate && r.dueTime) reminders.push({ kind: 'relative', offsetMin: auto });
         for (const rem of reminders) {
           changes.push({
             type: 'reminder',

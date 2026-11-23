@@ -3859,3 +3859,8 @@ label.row {
 .search-notes a svg {
   color: var(--accent-strong);
 }
+
+.notify-switch {
+  gap: 8px;
+  margin: 2px 0 8px;
+}

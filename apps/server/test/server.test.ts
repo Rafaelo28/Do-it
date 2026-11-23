@@ -653,4 +653,33 @@ describe('Server', () => {
     const ics = await new Client().req('GET', new URL(json.url).pathname);
     expect(ics.text).toMatch(/SUMMARY:Chorprobe[\s\S]*?RRULE:FREQ=DAILY;INTERVAL=7/);
   });
+
+  it('stumme Termine (Stundenplan): keine Erinnerung, nicht im Morgen-Briefing', async () => {
+    const now = new Date();
+    const local = zonedParts(now, 'Europe/Berlin');
+    const mathe = uuidv7();
+    const arzt = uuidv7();
+    const rem = uuidv7();
+    await anna.push([
+      { type: 'task', id: mathe, data: { projectId: annaInbox, title: 'Mathe', isEvent: true, silent: true, dueDate: local.date, dueTime: '23:59', recurrence: { freq: 'week', interval: 1 }, createdAt: 'x' } },
+      // auch eine übrig gebliebene Erinnerung schickt nichts
+      { type: 'reminder', id: rem, data: { taskId: mathe, kind: 'relative', offsetMin: 0 } },
+      { type: 'task', id: arzt, data: { projectId: annaInbox, title: 'Arzt', isEvent: true, dueDate: local.date, dueTime: '23:58', createdAt: 'x' } },
+    ]);
+    sent.length = 0;
+    const fire = zonedToUtc(local.date, '23:59', 'Europe/Berlin');
+    await processDueReminders(db, push, new Date(fire.getTime() + 1000));
+    expect(sent.some((s) => s.payload.title === 'Mathe')).toBe(false);
+    // Morgen-Briefing: der normale Termin steht drin, der stumme nicht
+    await db.query('UPDATE users SET last_briefing_date = NULL WHERE id = $1', [annaId]);
+    await anna.req('PATCH', '/api/me', { settings: { briefingTime: local.time, briefingEnabled: true } });
+    sent.length = 0;
+    await processBriefings(db, push, now);
+    const brief = sent.find((s) => s.payload.title === 'Guten Morgen!');
+    expect(String(brief?.payload.body)).toContain('Arzt');
+    expect(String(brief?.payload.body)).not.toContain('Mathe');
+    // wieder einschalten ist erlaubt, ungültige Werte nicht
+    expect((await anna.push([{ type: 'task', id: mathe, data: { silent: false } }])).json.rejected).toEqual([]);
+    expect((await anna.push([{ type: 'task', id: mathe, data: { silent: 'ja' } }])).json.rejected).toHaveLength(1);
+  });
 });

@@ -62,6 +62,8 @@ export const taskSchema = z.strictObject({
   createdAt: isoSchema,
   /** Termin statt To-do: steht im Kalender, wird nicht abgehakt */
   isEvent: z.boolean().optional(),
+  /** stumm: keine Erinnerungen, nicht in der Briefing-Benachrichtigung (z. B. Stundenplan) */
+  silent: z.boolean().optional(),
 });
 
 export const labelSchema = z.strictObject({

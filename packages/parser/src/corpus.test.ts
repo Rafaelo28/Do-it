@@ -308,6 +308,23 @@ describe('Parser-Details', () => {
     expect(parseTask('Zahnarzt anrufen .ges', ctx)).toMatchObject({ title: 'Zahnarzt anrufen', projectId: 'p-gesundheit' });
   });
 
+  it('"ohne Erinnerung" schaltet stumm (z. B. Stundenplan)', () => {
+    expect(parseTask('Mathe jeden Montag 8 Uhr 45 min ohne Erinnerung', ctx)).toMatchObject({
+      title: 'Mathe',
+      silent: true,
+      dueTime: '08:00',
+      durationMin: 45,
+      recurrence: { freq: 'week', weekdays: [1] },
+      reminders: [],
+    });
+    expect(parseTask('Deutsch Dienstag 9:50 keine Benachrichtigung', ctx)).toMatchObject({ title: 'Deutsch', silent: true });
+    // ausdrückliche Erinnerung und "ohne Erinnerung": stumm gewinnt
+    expect(parseTask('Bio morgen 10 Uhr erinnere mich 10 min vorher ohne Erinnerung', ctx)).toMatchObject({ silent: true, reminders: [] });
+    // normales Wort bleibt Text
+    expect(parseTask('Handy stumm schalten', ctx)).toMatchObject({ title: 'Handy stumm schalten', silent: false });
+    expect(parseTask('Zahnarzt morgen 9 Uhr', ctx).silent).toBe(false);
+  });
+
   it('ignorierte Stellen bleiben Text', () => {
     const r = parseTask('Freitag Bericht', { ...ctx, ignore: ['freitag'] });
     expect(r.dueDate).toBeNull();
