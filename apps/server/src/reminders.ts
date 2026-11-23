@@ -106,7 +106,8 @@ export async function processDueReminders(db: Db, push: PushService, now = new D
       [r.task_id, r.user_id],
     );
     await db.query('UPDATE reminder_schedule SET sent_at = $2 WHERE reminder_id = $1', [r.reminder_id, now]);
-    if (!task || !task.visible || task.data.completedAt) continue;
+    // stumm geschaltet (z. B. Stundenplan): nichts schicken
+    if (!task || !task.visible || task.data.completedAt || task.data.silent) continue;
     if (now.getTime() - new Date(r.fire_at).getTime() > MISSED_AFTER_MS) {
       if (task.data.isEvent && task.data.recurrence) await rescheduleReminders(db, { taskIds: [], reminderIds: [r.reminder_id] }, now);
       missedByUser.set(r.user_id, (missedByUser.get(r.user_id) ?? 0) + 1);
@@ -168,9 +169,9 @@ export async function processBriefings(db: Db, push: PushService, now = new Date
       [u.id, local.date],
     );
     await db.query('UPDATE users SET last_briefing_date = $2 WHERE id = $1', [u.id, local.date]);
-    const tasks = rows.filter((r) => !r.data.isEvent).slice(0, 50);
+    const tasks = rows.filter((r) => !r.data.isEvent && !r.data.silent).slice(0, 50);
     const events = rows
-      .filter((r) => r.data.isEvent && occurrencesBetween(r.data.dueDate!, r.data.recurrence, local.date, local.date).length > 0)
+      .filter((r) => r.data.isEvent && !r.data.silent && occurrencesBetween(r.data.dueDate!, r.data.recurrence, local.date, local.date).length > 0)
       .sort((a, b) => (a.data.dueTime ?? '').localeCompare(b.data.dueTime ?? ''));
     if (!tasks.length && !events.length) continue;
     const overdue = tasks.filter((t) => t.data.dueDate! < local.date).length;

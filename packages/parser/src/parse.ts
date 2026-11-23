@@ -118,6 +118,8 @@ export interface ParseResult {
   assigneeId: string | null;
   rotation: string[];
   reminders: ParsedReminder[];
+  /** "ohne Erinnerung": keine Benachrichtigung für diesen Eintrag */
+  silent: boolean;
   spans: Span[];
   /** mehrere Projekte passen: Auswahl anbieten */
   projectSuggestions: string[];
@@ -137,6 +139,7 @@ type Payload =
   | { k: 'relReminder'; offsetMin: number }
   | { k: 'eveReminder' }
   | { k: 'remMarker' }
+  | { k: 'silent' }
   | { k: 'deadlineMarker'; strict: boolean }
   | { k: 'offset'; days: number }
   | { k: 'priority'; p: 1 | 2 | 3 | 4 }
@@ -316,6 +319,8 @@ rule(PRIO_REMINDER, `(?:sag|gib)\\s+mir\\s+(?<n>${NUM})\\s*${UNIT}\\s+(?:vorher|
 });
 rule(PRIO_REMINDER, `${REM}\\s+(?:zur\\s+fälligkeit|pünktlich|zum\\s+termin|rechtzeitig)`, () => ({ k: 'relReminder', offsetMin: 0 }));
 rule(PRIO_MARKER + 2, `${REM}(?:\\s*:)?`, () => ({ k: 'remMarker' }));
+// z. B. für den Stundenplan: "Mathe jeden Montag 8 Uhr ohne Erinnerung"
+rule(PRIO_REMINDER + 1, `(?:ohne|keine)\\s+(?:erinnerung(?:en)?|benachrichtigung(?:en)?|reminder|push)`, () => ({ k: 'silent' }));
 rule(PRIO_MARKER, `(?:deadline|frist|abgabefrist|fällig\\s+spätestens)(?:\\s*:)?(?:\\s+(?:ist|am|bis|zum))?`, () => ({ k: 'deadlineMarker', strict: true }));
 // weichere Deadline-Wörter: nur wenn ein Datum folgt, sonst bleiben sie normaler Text
 rule(PRIO_MARKER, `(?:(?:bis\\s+)?spätestens(?:\\s+(?:am|bis|zum))?|abgabe(?:termin|datum)?(?:\\s*:)?(?:\\s+(?:ist|am|bis|zum))?)`, () => ({ k: 'deadlineMarker', strict: false }));
@@ -1060,6 +1065,7 @@ export function parseTask(input: string, context: ParseContext): ParseResult {
     assigneeId: null,
     rotation: [],
     reminders: [],
+    silent: false,
     spans: [],
     projectSuggestions: [],
     warnings: [],
@@ -1124,6 +1130,10 @@ export function parseTask(input: string, context: ParseContext): ParseResult {
         break;
       case 'eveReminder':
         eveReminder = true;
+        addSpan(cd.start, cd.end, 'reminder');
+        break;
+      case 'silent':
+        result.silent = true;
         addSpan(cd.start, cd.end, 'reminder');
         break;
       case 'deadlineMarker': {
@@ -1345,6 +1355,7 @@ export function parseTask(input: string, context: ParseContext): ParseResult {
   }
 
   result.spans.sort((a, b) => a.start - b.start);
+  if (result.silent) result.reminders = [];
   result.title = buildTitle(input, removed, reminderAtStart);
 
   const lowerTitle = result.title.toLowerCase();

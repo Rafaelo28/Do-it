@@ -8,7 +8,7 @@ import { db } from '../lib/db';
 import { toast } from '../lib/store';
 import { syncState } from '../lib/sync';
 import { nowLocal } from '../lib/time';
-import { IconBell, IconCalendar, IconClock, IconFlag, IconHash, IconRepeat, IconSparkle, IconTag, IconUser, IconWarn, IconX } from './Icons';
+import { IconBell, IconBellOff, IconCalendar, IconClock, IconFlag, IconHash, IconRepeat, IconSparkle, IconTag, IconUser, IconWarn, IconX } from './Icons';
 import { dueLabel, durationLabel, PRIORITY_COLOR, recurrenceLabel, reminderLabel } from './ui';
 import { projectOptions, Select } from './Select';
 
@@ -51,7 +51,9 @@ export function QuickAdd(props: QuickAddProps) {
   const [manualProject, setManualProject] = useState<string | null>(null);
   const [batch, setBatch] = useState<ParseResult[] | null>(null);
   const [eventMode, setEventMode] = useState(!!props.asEvent && !props.parentId);
-  const defaults = eventMode ? { ...props.defaults, isEvent: true } : props.defaults;
+  /** Termin ohne Benachrichtigung (bleibt für die nächsten Einträge stehen, z. B. beim Stundenplan) */
+  const [silent, setSilent] = useState(false);
+  const defaults = eventMode ? { ...props.defaults, isEvent: true, ...(silent ? { silent: true } : {}) } : props.defaults;
   const inputRef = useRef<HTMLInputElement>(null);
   const mirrorRef = useRef<HTMLDivElement>(null);
 
@@ -298,6 +300,11 @@ export function QuickAdd(props: QuickAddProps) {
               <IconFlag size={14} /> P{result.priority}
             </button>
           )}
+          {result.silent && (
+            <button className="chip" style={chip('reminder')} onClick={() => ignoreSpans(['reminder'])} title="Tippen, um den Text zu behalten">
+              <IconBellOff size={14} /> Ohne Erinnerung
+            </button>
+          )}
           {result.reminders.map((r, i) => (
             <button key={i} className="chip" style={chip('reminder')} onClick={() => ignoreSpans(['reminder'])}>
               <IconBell size={14} /> {r.kind === 'relative' ? reminderLabel(r.offsetMin) : dueLabel(r.date, r.time, ctx.today)}
@@ -341,6 +348,22 @@ export function QuickAdd(props: QuickAddProps) {
             }}
           >
             <IconCalendar size={14} /> Termin
+          </button>
+        )}
+        {eventMode && (
+          <button
+            type="button"
+            className={`chip toggle ${silent || result.silent ? 'on' : ''}`}
+            aria-pressed={silent || result.silent}
+            aria-label="Ohne Benachrichtigung"
+            title="Keine Erinnerung und kein Hinweis im Morgen-Briefing – z. B. für den Stundenplan"
+            onClick={() => {
+              if (result.silent) ignoreSpans(['reminder']);
+              else setSilent((v) => !v);
+              inputRef.current?.focus();
+            }}
+          >
+            {silent || result.silent ? <IconBellOff size={14} /> : <IconBell size={14} />} {silent || result.silent ? 'Stumm' : 'Erinnern'}
           </button>
         )}
         <span className="spacer" />
