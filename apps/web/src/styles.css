@@ -3864,3 +3864,42 @@ label.row {
   gap: 8px;
   margin: 2px 0 8px;
 }
+
+/* Dauer-Vorschläge */
+.qa-durations {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.chip.dur-pick {
+  cursor: pointer;
+  border: 1px dashed var(--border);
+  background: none;
+  color: var(--muted);
+}
+
+@media (hover: hover) {
+  .chip.dur-pick:hover {
+    color: var(--text);
+    border-style: solid;
+  }
+}
+
+.duration-chips {
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.duration-chips .chip {
+  cursor: pointer;
+}
+
+.duration-chips .chip.on {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+button.chip {
+  cursor: pointer;
+}

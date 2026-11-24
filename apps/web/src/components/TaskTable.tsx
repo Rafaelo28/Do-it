@@ -9,6 +9,7 @@ import { Avatar } from './Avatar';
 import { IconCheck, IconFlag, IconRepeat } from './Icons';
 import { PRIORITY_COLOR } from './ui';
 import { Select } from './Select';
+import { DeferredInput } from './DeferredInput';
 
 type Col = 'title' | 'project' | 'due' | 'deadline' | 'duration' | 'priority' | 'labels' | 'assignee';
 
@@ -100,22 +101,22 @@ export function TaskTable({ tasks, showProject = true }: { tasks: Task[]; showPr
                 </td>
                 {showProject && <td className="muted">{projectName(t)}</td>}
                 <td>
-                  <input
+                  <DeferredInput
                     className={`cell-input ${t.dueDate && t.dueDate < now.date ? 'overdue' : ''}`}
                     type="date"
                     aria-label={`Fällig: ${t.title}`}
                     value={t.dueDate ?? ''}
-                    onChange={(e) => void updateTask(t.id, e.target.value ? { dueDate: e.target.value } : { dueDate: null, dueTime: null })}
+                    onCommit={(v) => void updateTask(t.id, v ? { dueDate: v } : { dueDate: null, dueTime: null })}
                   />
                   {t.dueTime && <span className="muted small"> {t.dueTime}</span>}
                 </td>
                 <td>
-                  <input
+                  <DeferredInput
                     className={`cell-input ${t.deadline && t.deadline < now.date ? 'overdue' : ''}`}
                     type="date"
                     aria-label={`Deadline: ${t.title}`}
                     value={t.deadline ?? ''}
-                    onChange={(e) => void updateTask(t.id, { deadline: e.target.value || null })}
+                    onCommit={(v) => void updateTask(t.id, { deadline: v || null })}
                   />
                 </td>
                 <td>
