@@ -37,7 +37,7 @@ Selbst gehostete Todo-App für eine kleine Gruppe – Aufgaben in normaler Sprac
 | `apps/server` | Fastify + PostgreSQL: Login, Sync, WebSocket, Push, Erinnerungs-Dienst |
 | `apps/web` | React-PWA mit IndexedDB, Service Worker und Sync-Client |
 | `deploy` | Dockerfile, Compose (App, Worker, DB, Backup, Cloudflare Tunnel), Skripte |
-| `docs` | [Bauplan](docs/BAUPLAN.md), [Betriebsanleitung](docs/betrieb.md), [Claude verbinden](docs/claude.md), [Android-App (Plan)](docs/apk-bauplan.md) |
+| `docs` | [Bauplan](docs/BAUPLAN.md), [Betriebsanleitung](docs/betrieb.md), [Claude verbinden](docs/claude.md), [Android-App (Plan)](docs/apk-bauplan.md), [Stundenplan-Anbindung (Plan)](docs/stundenplan-bauplan.md) |
 
 ## Schnellstart (Server)
 
