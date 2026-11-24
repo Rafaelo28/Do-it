@@ -29,7 +29,7 @@ export async function createProject(name: string, color?: string): Promise<strin
 }
 
 export async function updateProject(id: string, changes: Record<string, unknown>): Promise<void> {
-  await sync.mutate('project', id, 'put', changes);
+  await sync.mutate('project', id, 'put', changes, { ifExists: true });
 }
 
 export async function deleteProject(id: string): Promise<void> {
@@ -129,7 +129,7 @@ export async function createTaskFromParse(r: ParseResult, opts: CreateOptions): 
 }
 
 export async function updateTask(id: string, changes: Partial<TaskData>): Promise<void> {
-  await sync.mutate('task', id, 'put', changes as Record<string, unknown>);
+  await sync.mutate('task', id, 'put', changes as Record<string, unknown>, { ifExists: true });
 }
 
 /** In ein anderes Projekt verschieben – Unteraufgaben ziehen mit, Zuständigkeit wird gelöst, wenn die Person dort fehlt. */

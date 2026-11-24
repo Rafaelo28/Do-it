@@ -67,14 +67,14 @@ async function dropTask(taskId: string, projectId: string, s: DragState): Promis
   const next = siblings[index]?.sortKey ?? null;
   try {
     const key = generateKeyBetween(prev, next);
-    await sync.mutate('task', taskId, 'put', { sortKey: key, sectionId });
+    await sync.mutate('task', taskId, 'put', { sortKey: key, sectionId }, { ifExists: true });
   } catch {
     // gleiche Schlüssel (z. B. offline auf zwei Geräten angelegt): alles neu verteilen
     const order = [...siblings];
     order.splice(index, 0, { id: taskId } as (typeof siblings)[number]);
     const keys = generateNKeysBetween(null, null, order.length);
     for (let i = 0; i < order.length; i++) {
-      await sync.mutate('task', order[i]!.id, 'put', order[i]!.id === taskId ? { sortKey: keys[i], sectionId } : { sortKey: keys[i] });
+      await sync.mutate('task', order[i]!.id, 'put', order[i]!.id === taskId ? { sortKey: keys[i], sectionId } : { sortKey: keys[i] }, { ifExists: true });
     }
   }
 }

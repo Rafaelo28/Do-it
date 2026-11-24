@@ -113,14 +113,23 @@ class SyncEngine {
   }
 
   /** Lokale Änderung: sofort in IndexedDB, dann im Hintergrund zum Server. */
-  async mutate(type: ObjectType, id: string, op: 'put' | 'delete', data?: Record<string, unknown>): Promise<void> {
+  /**
+   * ifExists: nur ändern, wenn es das Objekt hier noch gibt – sonst entstünde aus einer verspäteten
+   * Änderung (z. B. Feld speichert nach dem Löschen) ein unvollständiger "Geister"-Eintrag.
+   */
+  async mutate(type: ObjectType, id: string, op: 'put' | 'delete', data?: Record<string, unknown>, opts?: { ifExists?: boolean }): Promise<void> {
     if (!this.clock) throw new Error('Sync nicht gestartet');
     const hlc = this.clock.tick();
     const tables = [...OBJECT_TABLES(), db.outbox, db.meta];
+    let skipped = false;
     await db.transaction('rw', tables, async () => {
       const table = db.tableFor(type);
       if (op === 'put') {
         const existing = await table.get(id);
+        if (!existing && opts?.ifExists) {
+          skipped = true;
+          return;
+        }
         const row = existing ? { ...existing, ...data } : { ...OBJECT_DEFAULTS[type], ...data, id };
         await table.put(row as never);
       } else {
@@ -130,6 +139,7 @@ class SyncEngine {
       await db.outbox.add({ mid: uuidv7(), type, id, op, data, hlc });
       await db.setMeta('lastHlc', hlc);
     });
+    if (skipped) return;
     await this.updatePending();
     this.schedule();
   }
@@ -244,6 +254,9 @@ class SyncEngine {
         const taskIds = await db.tasks.where('projectId').anyOf(removed).primaryKeys();
         await db.tasks.bulkDelete(taskIds);
         await db.comments.where('taskId').anyOf(taskIds).delete();
+        await db.reminders.where('taskId').anyOf(taskIds).delete();
+        // aus einem geteilten Projekt entfernt: auch dessen Notizen nicht mehr auf dem Gerät behalten
+        await db.notes.where('projectId').anyOf(removed).delete();
       });
     }
     await db.setMeta('projectIds', resp.projectIds);

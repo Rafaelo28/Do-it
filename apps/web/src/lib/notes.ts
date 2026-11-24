@@ -20,7 +20,7 @@ export async function createNote(projectId: string, init?: Partial<NoteData>): P
 }
 
 export async function updateNote(id: string, changes: Partial<NoteData>): Promise<void> {
-  await sync.mutate('note', id, 'put', { ...changes, updatedAt: new Date().toISOString() });
+  await sync.mutate('note', id, 'put', { ...changes, updatedAt: new Date().toISOString() }, { ifExists: true });
 }
 
 export async function deleteNote(id: string): Promise<void> {

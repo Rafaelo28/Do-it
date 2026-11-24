@@ -193,6 +193,9 @@ const MIGRATIONS: string[] = [
   FROM activity a JOIN users u ON u.id = a.user_id
   WHERE a.kind = 'completed';
   `,
+  /* 5: Push-Abo gehört zur Sitzung, die es angelegt hat (abgemeldete Geräte bekommen nichts mehr) */ `
+  ALTER TABLE push_subscriptions ADD COLUMN session_hash text;
+  `,
 ];
 
 export async function migrate(db: Db): Promise<number> {

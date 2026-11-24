@@ -750,7 +750,7 @@ function Password() {
               .then(() => {
                 setCurrent('');
                 setNext('');
-                toast('Passwort geändert. Andere Geräte wurden abgemeldet.');
+                toast('Passwort geändert. Andere Geräte und Verbindungen (z. B. Claude) wurden abgemeldet.');
               })
               .catch((e: Error) => toast(e.message, { kind: 'error' }))
           }
