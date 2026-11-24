@@ -315,7 +315,9 @@ export async function buildApp({ config, db, pushTransport, logger = false }: Ap
     if (weak) throw new HttpError(400, weak);
     await db.query('UPDATE users SET password_hash = $2 WHERE id = $1', [user.id, await hashPassword(body.next)]);
     await db.query('DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2', [user.id, sha256(sessionToken(req) ?? '')]);
-    return { ok: true };
+    // auch Zugänge für Claude & Co. widerrufen – wer das Passwort kannte, soll keinen Schlüssel behalten
+    const revoked = await db.query('DELETE FROM api_tokens WHERE user_id = $1 RETURNING 1', [user.id]);
+    return { ok: true, revokedConnections: revoked.length > 0 };
   });
 
   // ---------- Sitzungen und Zwei-Faktor-Anmeldung ----------
@@ -682,7 +684,7 @@ export async function buildApp({ config, db, pushTransport, logger = false }: Ap
 
   app.post('/api/push/subscription', async (req) => {
     const user = await requireUser(req);
-    await push.subscribe(user.id, subscriptionSchema.parse(req.body), req.headers['user-agent']);
+    await push.subscribe(user.id, subscriptionSchema.parse(req.body), req.headers['user-agent'], sha256(sessionToken(req) ?? ''));
     return { ok: true, devices: await push.deviceCount(user.id) };
   });
 
@@ -771,14 +773,11 @@ export async function buildApp({ config, db, pushTransport, logger = false }: Ap
         else res.header('Cache-Control', 'public, max-age=3600');
       },
     });
-    const sendIndex = (reply: FastifyReply) =>
-      reply
-        .header('Cache-Control', 'no-cache')
-        .header(
-          'Content-Security-Policy',
-          "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss: https://api.todoist.com; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'",
-        )
-        .sendFile('index.html');
+    // WebSocket nur zur eigenen Adresse (nicht zu beliebigen Servern)
+    const appUrl = new URL(config.APP_URL);
+    const wsOrigin = `${appUrl.protocol === 'https:' ? 'wss:' : 'ws:'}//${appUrl.host}`;
+    const csp = `default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ${wsOrigin} https://api.todoist.com; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'`;
+    const sendIndex = (reply: FastifyReply) => reply.header('Cache-Control', 'no-cache').header('Content-Security-Policy', csp).sendFile('index.html');
     app.get('/', (req, reply) => sendIndex(reply));
     app.setNotFoundHandler((req, reply) => {
       if (req.url.startsWith('/api/') || (req.method !== 'GET' && req.method !== 'HEAD')) return reply.code(404).send({ error: 'Nicht gefunden' });

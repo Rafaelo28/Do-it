@@ -160,10 +160,11 @@ Das Skript sichert zuerst die Datenbank, holt den neuen Code, baut das Image, st
 | Ersteinrichtung | nur mit dem Einrichtungscode aus dem Server-Log (siehe Schritt 4) |
 | Passwörter | scrypt-Hashes, mindestens 8 Zeichen, sehr häufige Passwörter („passwort123“, „12345678“ …) werden abgelehnt |
 | Zwei-Faktor-Anmeldung | Einstellungen → *Zwei-Faktor-Anmeldung* → mit einer Authenticator-App (Aegis, 2FAS, Google/Microsoft Authenticator). Dazu gibt es 8 Wiederherstellungscodes. |
-| Angemeldete Geräte | Einstellungen → *Angemeldete Geräte*: Liste aller Sitzungen, „Alle anderen Geräte abmelden“. Passwort ändern meldet ebenfalls alle anderen Geräte ab. |
+| Angemeldete Geräte | Einstellungen → *Angemeldete Geräte*: Liste aller Sitzungen, „Alle anderen Geräte abmelden“. Passwort ändern meldet ebenfalls alle anderen Geräte ab und widerruft Verbindungen wie Claude. Ein abgemeldetes oder abgelaufenes Gerät bekommt auch keine Benachrichtigungen mehr (z. B. ein verlorenes Handy). |
+| Geteilte Projekte | Wer aus einem Projekt entfernt wird, verliert sofort den Zugriff; Aufgaben und Notizen dieses Projekts werden auch von seinen Geräten gelöscht. Notizen anderer werden ohne eingebettetes HTML, Skripte oder `javascript:`-Links angezeigt. |
 | Brute-Force | 10 Anmeldeversuche pro Konto und IP in 15 Minuten, 30 pro IP, 10 falsche Zwei-Faktor-Codes pro Konto. Dazu ein grobes Limit von 600 Anfragen pro Minute und IP. |
 | Cookies | `__Host-`-Präfix, `HttpOnly`, `Secure`, `SameSite=Lax`. Schreibende Anfragen nur von der eigenen Adresse (Origin-Prüfung). |
-| Browser-Schutz | Content-Security-Policy (nur eigene Skripte), HSTS, `X-Frame-Options: DENY`, `nosniff`, Permissions-Policy (kein Zugriff auf Kamera, Mikrofon, Standort) |
+| Browser-Schutz | Content-Security-Policy (nur eigene Skripte, Verbindungen nur zum eigenen Server), HSTS, `X-Frame-Options: DENY`, `nosniff`, Permissions-Policy (kein Zugriff auf Kamera, Mikrofon, Standort) |
 | Container | Läuft als Benutzer `node`, ohne Linux-Capabilities und mit `no-new-privileges`. Logs werden auf 3 × 10 MB begrenzt. |
 | Daten | Nächtliche Datenbank-Sicherung. Alte Sitzungen, Codes und Einträge werden automatisch aufgeräumt. |
 

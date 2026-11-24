@@ -375,6 +375,11 @@ describe('Server', () => {
     expect(ics.status).toBe(200);
     expect(ics.text).toContain('SUMMARY:Arzt\\; Kontrolle');
     expect(ics.text).toContain('DTSTART:20300115T083000Z');
+    // Zeilenumbrüche im Titel (auch einzelnes \r) dürfen keine eigenen Kalenderzeilen erzeugen
+    await anna.push([{ type: 'task', id: uuidv7(), data: { projectId: annaInbox, title: 'Böse\rBEGIN:VALARM\nACTION:AUDIO', dueDate: '2030-01-16', createdAt: 'x' } }]);
+    const ics2 = await new Client().req('GET', path);
+    expect(ics2.text).toContain('SUMMARY:Böse\\nBEGIN:VALARM\\nACTION:AUDIO');
+    expect(ics2.text.split(/\r\n|\r|\n/).some((l) => l === 'BEGIN:VALARM' || l.startsWith('ACTION:'))).toBe(false);
   });
 
   it('WebSocket stupst bei Änderungen an', async () => {
@@ -396,6 +401,13 @@ describe('Server', () => {
     expect(res.headers['cache-control']).toBe('no-store');
     // HSTS nur über HTTPS
     expect(res.headers['strict-transport-security']).toBeUndefined();
+    // Seite selbst (nur wenn die Web-App gebaut ist): WebSocket nur zur eigenen Adresse
+    const page = await app.inject({ method: 'GET', url: '/' });
+    if (String(page.headers['content-type']).includes('text/html')) {
+      const csp = String(page.headers['content-security-policy']);
+      expect(csp).toContain("connect-src 'self' ws://localhost:8080 https://api.todoist.com");
+      expect(csp).not.toMatch(/ wss?: /);
+    }
   });
 
   it('Erledigt-Übersicht listet abgeschlossene Aufgaben', async () => {
@@ -417,6 +429,36 @@ describe('Server', () => {
     expect(out.json.removed).toBeGreaterThanOrEqual(1);
     expect((await phone.req('GET', '/api/me')).status).toBe(401);
     expect((await ben.req('GET', '/api/me')).status).toBe(200);
+  });
+
+  it('verlorenes Gerät abgemeldet: keine Benachrichtigungen mehr dorthin', async () => {
+    const phone = new Client();
+    expect((await phone.req('POST', '/api/auth/login', { email: 'ben@example.org', password: 'ben-geheim-42' })).status).toBe(200);
+    const sub = (name: string) => ({ endpoint: `https://push.example/${name}`, keys: { p256dh: 'p'.repeat(40), auth: 'a'.repeat(16) } });
+    await phone.req('POST', '/api/push/subscription', sub('ben-phone'));
+    await ben.req('POST', '/api/push/subscription', sub('ben-laptop'));
+    sent.length = 0;
+    await push.sendToUser(benId, { title: 'Vorher', body: 'x', tag: 't' });
+    const mine = () => sent.map((s) => s.endpoint).filter((e) => /ben-(phone|laptop)$/.test(e)).sort();
+    expect(mine()).toEqual(['https://push.example/ben-laptop', 'https://push.example/ben-phone']);
+    // Handy über "Andere Geräte abmelden" entfernt
+    await ben.req('POST', '/api/me/sessions/logout-others');
+    sent.length = 0;
+    await push.sendToUser(benId, { title: 'Nachher', body: 'x', tag: 't' });
+    expect(mine()).toEqual(['https://push.example/ben-laptop']);
+    expect((await db.one<{ n: number }>(`SELECT count(*)::int AS n FROM push_subscriptions WHERE endpoint LIKE '%ben-phone'`))!.n).toBe(0);
+    await ben.req('DELETE', '/api/push/subscription', { endpoint: 'https://push.example/ben-laptop' });
+  });
+
+  it('Passwort ändern widerruft auch Zugänge für Claude & Co.', async () => {
+    const pat = await ben.req<{ token: string }>('POST', '/api/tokens', { name: 'Test' });
+    const mcp = (token: string) =>
+      app.inject({ method: 'POST', url: '/mcp', headers: { authorization: `Bearer ${token}`, accept: 'application/json, text/event-stream', 'content-type': 'application/json' }, payload: { jsonrpc: '2.0', id: 1, method: 'tools/list' } });
+    expect((await mcp(pat.json.token)).statusCode).toBe(200);
+    const res = await ben.req<{ revokedConnections: boolean }>('POST', '/api/me/password', { current: 'ben-geheim-42', next: 'ben-neu-geheim-43' });
+    expect(res.json.revokedConnections).toBe(true);
+    expect((await mcp(pat.json.token)).statusCode).toBe(401);
+    await ben.req('POST', '/api/me/password', { current: 'ben-neu-geheim-43', next: 'ben-geheim-42' });
   });
 
   it('Zwei-Faktor-Anmeldung: einrichten, anmelden, Wiederherstellungscode, ausschalten', async () => {

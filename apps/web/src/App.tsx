@@ -10,7 +10,7 @@ import { DataProvider, useData } from './lib/data';
 import { db } from './lib/db';
 import { toast } from './lib/store';
 import { sync, syncState, wipeLocalData } from './lib/sync';
-import { isStandalone } from './lib/push';
+import { isStandalone, refreshPushSubscription } from './lib/push';
 import { LAUNCH_PATH, startPath } from './lib/start';
 import { setTimeZone } from './lib/time';
 import { AuthView } from './views/Auth';
@@ -49,6 +49,7 @@ export function App() {
     syncState.set((s) => ({ ...s, me }));
     await db.setMeta('me', me);
     void sync.start();
+    void refreshPushSubscription().catch(() => {});
     setPhase('ready');
   }
 
@@ -86,8 +87,10 @@ export function App() {
         onDone={(me) =>
           void start(me).then(() => {
             // Freigabe für Claude o. Ä.: zurück zur Server-Seite (keine App-Route)
-            if (next?.startsWith('/oauth/')) window.location.href = next;
-            else if (next?.startsWith('/')) navigate(next);
+            // nur Pfade dieser Seite (kein "//fremde-seite.de" oder "/\\fremde-seite.de")
+            const local = next && /^\/(?![/\\])/.test(next) ? next : null;
+            if (local?.startsWith('/oauth/')) window.location.href = local;
+            else if (local) navigate(local);
             else if (location === '/login' || location === '/') navigate('/', { replace: true });
           })
         }

@@ -202,7 +202,8 @@ export function NoteEditor({ note, focusTitle }: { note: Note; focusTitle?: bool
       handleClick: (_view, _pos, event) => {
         const a = (event.target as HTMLElement).closest('a');
         if (a && (event.metaKey || event.ctrlKey)) {
-          window.open(a.href, '_blank', 'noopener');
+          // nur normale Web-, Mail- und Telefon-Links öffnen (Notizen können von anderen kommen)
+          if (/^(https?:|mailto:|tel:)/i.test(a.href)) window.open(a.href, '_blank', 'noopener,noreferrer');
           return true;
         }
         return false;

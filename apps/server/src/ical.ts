@@ -1,7 +1,8 @@
 import { addDays, toRRule, zonedToUtc, type TaskData } from '@do-it/shared';
 
 function esc(s: string): string {
-  return s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+  // auch ein einzelnes \r (manche Kalender lesen es als Zeilenende) – sonst ließen sich Zeilen einschleusen
+  return s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r\n|\r|\n/g, '\\n');
 }
 
 function utcStamp(d: Date): string {

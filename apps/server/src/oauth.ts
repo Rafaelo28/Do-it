@@ -242,8 +242,8 @@ export function registerOAuth(app: FastifyInstance, deps: { db: Db; config: Conf
         `<img src="/icons/icon.svg" alt="">
 <h1>${esc(client.name)} möchte auf Do-it zugreifen</h1>
 <p>Angemeldet als <b>${esc(user.name)}</b> (${esc(user.email)}). ${esc(client.name)} darf dann:</p>
-<ul>${scope.includes('tasks:read') ? '<li>deine Aufgaben und Projekte lesen</li>' : ''}${
-          scope.includes('tasks:write') ? '<li>Aufgaben anlegen, ändern, abhaken und Briefings für dich speichern</li>' : ''
+<ul>${scope.includes('tasks:read') ? '<li>deine Aufgaben, Projekte und Notizen lesen</li>' : ''}${
+          scope.includes('tasks:write') ? '<li>Aufgaben und Notizen anlegen und ändern, Aufgaben abhaken und Briefings für dich speichern</li>' : ''
         }</ul>
 <p>Du kannst den Zugriff jederzeit in Do-it unter Einstellungen → Claude wieder trennen.</p>
 <form method="post" action="/oauth/authorize">

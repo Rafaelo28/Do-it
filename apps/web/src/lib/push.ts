@@ -37,6 +37,16 @@ export async function enablePush(): Promise<void> {
   await api('POST', '/api/push/subscription', sub.toJSON());
 }
 
+/**
+ * Beim Start: vorhandenes Abo erneut melden. Der Server ordnet es so der aktuellen Sitzung zu –
+ * wird das Gerät später abgemeldet, bekommt es keine Benachrichtigungen mehr.
+ */
+export async function refreshPushSubscription(): Promise<void> {
+  if (!pushSupported() || Notification.permission !== 'granted') return;
+  const sub = await currentSubscription();
+  if (sub) await api('POST', '/api/push/subscription', sub.toJSON());
+}
+
 export async function disablePush(): Promise<void> {
   const sub = await currentSubscription();
   if (!sub) return;

@@ -65,11 +65,13 @@ export class PushService {
     private readonly transport: PushTransport,
   ) {}
 
-  async subscribe(userId: string, sub: PushSubscriptionInput, userAgent?: string): Promise<void> {
+  /** sessionHash: Sitzung, aus der das Abo kommt – wird sie abgemeldet oder läuft ab, bekommt das Gerät nichts mehr. */
+  async subscribe(userId: string, sub: PushSubscriptionInput, userAgent?: string, sessionHash?: string): Promise<void> {
     await this.db.query(
-      `INSERT INTO push_subscriptions(id, user_id, endpoint, p256dh, auth, user_agent) VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (endpoint) DO UPDATE SET user_id = EXCLUDED.user_id, p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth, failures = 0`,
-      [uuidv7(), userId, sub.endpoint, sub.keys.p256dh, sub.keys.auth, userAgent?.slice(0, 300) ?? null],
+      `INSERT INTO push_subscriptions(id, user_id, endpoint, p256dh, auth, user_agent, session_hash) VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (endpoint) DO UPDATE SET user_id = EXCLUDED.user_id, p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth,
+         session_hash = EXCLUDED.session_hash, failures = 0`,
+      [uuidv7(), userId, sub.endpoint, sub.keys.p256dh, sub.keys.auth, userAgent?.slice(0, 300) ?? null, sessionHash ?? null],
     );
   }
 
@@ -84,6 +86,12 @@ export class PushService {
 
   /** Schickt an alle Geräte des Nutzers. Abgelaufene Abos werden gelöscht. Liefert Anzahl erfolgreicher Zustellungen. */
   async sendToUser(userId: string, payload: PushPayload): Promise<number> {
+    // Geräte, deren Sitzung abgemeldet wurde oder abgelaufen ist, bekommen nichts mehr (verlorenes Handy)
+    await this.db.query(
+      `DELETE FROM push_subscriptions p WHERE p.user_id = $1 AND p.session_hash IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.token_hash = p.session_hash AND s.user_id = $1 AND s.expires_at > now())`,
+      [userId],
+    );
     const subs = await this.db.query<SubRow>('SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = $1', [userId]);
     const body = JSON.stringify(payload);
     let ok = 0;
