@@ -41,6 +41,7 @@ import { ProfilePhoto } from '../components/AvatarEditor';
 import { addDays, WEEKDAYS_SHORT } from '@do-it/shared';
 import { refreshKarma } from '../lib/karma';
 import { Dot, projectOptions, Select, type SelectOption } from '../components/Select';
+import { DeferredInput } from '../components/DeferredInput';
 import { startPath } from '../lib/start';
 
 function zones(current: string): string[] {
@@ -470,7 +471,14 @@ function BriefingSettings({ me }: { me: Me }) {
         <span>Morgen-Briefing</span>
         <div className="row" style={{ flexWrap: 'nowrap' }}>
           <input type="checkbox" checked={s.briefingEnabled} onChange={(e) => void saveMe({ settings: { briefingEnabled: e.target.checked } })} />
-          <input className="input" type="time" value={s.briefingTime} disabled={!s.briefingEnabled} onChange={(e) => e.target.value && void saveMe({ settings: { briefingTime: e.target.value } })} />
+          <DeferredInput
+            className="input"
+            type="time"
+            aria-label="Uhrzeit des Morgen-Briefings"
+            value={s.briefingTime}
+            disabled={!s.briefingEnabled}
+            onCommit={(v) => v && void saveMe({ settings: { briefingTime: v } })}
+          />
         </div>
       </label>
       <label className="field">

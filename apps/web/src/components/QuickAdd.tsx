@@ -3,6 +3,7 @@ import { type TaskData, timeToMinutes, minutesToTime } from '@do-it/shared';
 import { useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
 import { createTaskFromParse } from '../lib/actions';
 import { suggest, train } from '../lib/classifier';
+import { durationText, suggestDuration } from '../lib/duration';
 import { useData } from '../lib/data';
 import { db } from '../lib/db';
 import { toast } from '../lib/store';
@@ -83,6 +84,16 @@ export function QuickAdd(props: QuickAddProps) {
   const wantSuggestion = !props.parentId && !result.projectId && !result.newProjectName && !manualProject && result.title.length > 2;
   const model = useMemo(() => (wantSuggestion ? train(tasks, projects) : null), [wantSuggestion, tasks, projects]);
   const learned = useMemo(() => (model ? suggest(model, result.title) : null), [model, result.title]);
+  // Dauer: gelernt aus ähnlichen Aufgaben; mit Uhrzeit zusätzlich ein paar Schnellwahlen
+  const durHint = useMemo(
+    () => (!result.durationMin && !props.parentId && result.title.trim().length > 2 ? suggestDuration(result.title, tasks) : null),
+    [result.title, result.durationMin, tasks, props.parentId],
+  );
+  const durPicks = !result.durationMin && result.dueTime && result.title.trim() ? [15, 30, 60, 120].filter((m) => m !== durHint?.min) : [];
+  function addDuration(min: number) {
+    setText((t) => `${t.trimEnd()} ${durationText(min)}`);
+    inputRef.current?.focus();
+  }
 
   const baseProject = props.projectId ?? inbox?.id ?? '';
   const effectiveProject = manualProject ?? result.projectId ?? baseProject;
@@ -314,6 +325,21 @@ export function QuickAdd(props: QuickAddProps) {
             <button className="chip" style={chip('duration')} onClick={() => ignoreSpans(['duration'])}>
               <IconClock size={14} /> {durationLabel(result.durationMin)}
             </button>
+          )}
+          {durHint && (
+            <button className="chip suggest" onClick={() => addDuration(durHint.min)} title={`Dauer wie bei „${durHint.from}“`} aria-label={`Dauer ${durationLabel(durHint.min)} übernehmen`}>
+              <IconSparkle size={14} /> {durationLabel(durHint.min)}
+            </button>
+          )}
+          {durPicks.length > 0 && (
+            <span className="qa-durations" role="group" aria-label="Dauer wählen">
+              {!durHint && <IconClock size={13} className="muted" />}
+              {durPicks.map((m) => (
+                <button key={m} className="chip dur-pick" onClick={() => addDuration(m)} aria-label={`Dauer ${durationLabel(m)}`}>
+                  {durationLabel(m)}
+                </button>
+              ))}
+            </span>
           )}
           {result.warnings.map((w) => (
             <span key={w} className="chip warn">

@@ -7,7 +7,9 @@ import { Avatar } from '../components/Avatar';
 import { IconBack, IconBell, IconBellOff, IconCalendar, IconCheck, IconFlag, IconTrash, IconUser, IconX } from '../components/Icons';
 import { QuickAdd } from '../components/QuickAdd';
 import { TaskList } from '../components/TaskList';
-import { PRIORITY_COLOR, reminderLabel } from '../components/ui';
+import { durationLabel, PRIORITY_COLOR, reminderLabel } from '../components/ui';
+import { DeferredInput } from '../components/DeferredInput';
+import { DURATION_PRESETS, suggestDuration } from '../lib/duration';
 import { addComment, addReminder, deleteComment, deleteReminder, deleteTask, ensureLabels, moveTask, toggleTask, updateTask } from '../lib/actions';
 import { useData } from '../lib/data';
 import { db, type Task } from '../lib/db';
@@ -66,6 +68,7 @@ function Detail({ task }: { task: Task }) {
   const recParse = recText ? parseTask(recText, { today: now.date, now: now.time }) : null;
 
   const set = (changes: Partial<TaskData>) => void updateTask(task.id, changes);
+  const durationHint = suggestDuration(task.title, tasks, task.id);
 
   function goBack() {
     if (history.length > 1) history.back();
@@ -170,8 +173,16 @@ function Detail({ task }: { task: Task }) {
         <label className="field">
           <span>Datum</span>
           <div className="row" style={{ flexWrap: 'nowrap' }}>
-            <input className="input" type="date" value={task.dueDate ?? ''} disabled={readOnly} onChange={(e) => set({ dueDate: e.target.value || null })} />
-            <input className="input" type="time" value={task.dueTime ?? ''} disabled={readOnly || !task.dueDate} onChange={(e) => set({ dueTime: e.target.value || null })} style={{ maxWidth: 120 }} />
+            <DeferredInput className="input" type="date" aria-label="Datum" value={task.dueDate ?? ''} disabled={readOnly} onCommit={(v) => set({ dueDate: v || null })} />
+            <DeferredInput
+              className="input"
+              type="time"
+              aria-label="Uhrzeit"
+              value={task.dueTime ?? ''}
+              disabled={readOnly || !task.dueDate}
+              onCommit={(v) => set({ dueTime: v || null })}
+              style={{ maxWidth: 120 }}
+            />
           </div>
           {!readOnly && (
             <div className="row" style={{ gap: 4 }}>
@@ -300,22 +311,48 @@ function Detail({ task }: { task: Task }) {
         {!task.isEvent && (
           <label className="field">
             <span>Deadline</span>
-            <input className="input" type="date" value={task.deadline ?? ''} disabled={readOnly} onChange={(e) => set({ deadline: e.target.value || null })} />
+            <DeferredInput className="input" type="date" aria-label="Deadline" value={task.deadline ?? ''} disabled={readOnly} onCommit={(v) => set({ deadline: v || null })} />
           </label>
         )}
 
-        <label className="field">
-          <span>Dauer (Minuten)</span>
-          <input
-            className="input"
-            type="number"
-            min={1}
-            inputMode="numeric"
-            value={task.durationMin ?? ''}
-            disabled={readOnly}
-            onChange={(e) => set({ durationMin: e.target.value ? Math.max(1, Math.round(Number(e.target.value))) : null })}
-          />
-        </label>
+        <div className="field">
+          <span>Dauer</span>
+          <div className="row" style={{ flexWrap: 'nowrap', gap: 6 }}>
+            <DeferredInput
+              className="input"
+              type="number"
+              min={1}
+              max={10080}
+              inputMode="numeric"
+              aria-label="Dauer in Minuten"
+              placeholder="Minuten"
+              value={task.durationMin ? String(task.durationMin) : ''}
+              disabled={readOnly}
+              onCommit={(v) => set({ durationMin: v && Number(v) > 0 ? Math.min(10080, Math.round(Number(v))) : null })}
+              style={{ maxWidth: 110 }}
+            />
+            <span className="small muted">Min.{task.durationMin && task.durationMin >= 60 ? ` = ${durationLabel(task.durationMin)}` : ''}</span>
+          </div>
+          {!readOnly && (
+            <div className="row duration-chips" role="group" aria-label="Dauer wählen">
+              {durationHint && durationHint.min !== task.durationMin && (
+                <button className="chip suggest" title={`Wie bei „${durationHint.from}“`} onClick={() => set({ durationMin: durationHint.min })}>
+                  Vorschlag: {durationLabel(durationHint.min)}
+                </button>
+              )}
+              {DURATION_PRESETS.map((m) => (
+                <button key={m} className={`chip ${task.durationMin === m ? 'on' : ''}`} aria-pressed={task.durationMin === m} onClick={() => set({ durationMin: m })}>
+                  {durationLabel(m)}
+                </button>
+              ))}
+              {task.durationMin && (
+                <button className="btn ghost small" style={{ minHeight: 0, padding: '0 6px' }} onClick={() => set({ durationMin: null })}>
+                  entfernen
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <h2>Labels</h2>
