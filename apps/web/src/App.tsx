@@ -222,9 +222,12 @@ function Shell() {
           </Route>
         </Switch>
       </main>
-      <button className="fab" aria-label="Neue Aufgabe" onClick={() => setAdding('')}>
-        <IconPlus size={26} />
-      </button>
+      {/* in einer offenen Notiz stört der Knopf beim Schreiben (dort gibt es "Aufgabe" in der Leiste) */}
+      {!/^\/notes\/[^/]+/.test(location) && (
+        <button className="fab" aria-label="Neue Aufgabe" onClick={() => setAdding('')}>
+          <IconPlus size={26} />
+        </button>
+      )}
       {adding !== null && (
         <Modal onClose={() => setAdding(null)} label="Neue Aufgabe">
           <QuickAdd autoFocus initialText={adding} projectId={projectId} onDone={() => setAdding(null)} />

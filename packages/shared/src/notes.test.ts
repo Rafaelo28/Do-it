@@ -15,6 +15,7 @@ describe('Notizen', () => {
     expect(markdownToText(`# Titel\n\n- [ ] Milch\n- [x] **Brot**\n> Zitat mit [Link](https://x.de)\n\n${taskRef(A)}\n\n\`\`\`\ncode\n\`\`\``)).toBe(
       'Titel Milch Brot Zitat mit Link',
     );
+    expect(markdownToText('\\[\\] Milch \\*nicht fett\\*\n\n::: info\nHinweis\n:::\n\n| A | B |\n| --- | --- |\n&nbsp;\n| 1 | 2 |')).toBe('[] Milch *nicht fett* Hinweis A B 1 2');
   });
 
   it('Titel aus eigenem Titel oder erster Zeile', () => {

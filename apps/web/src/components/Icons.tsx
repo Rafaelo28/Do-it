@@ -343,3 +343,39 @@ export const IconTaskAdd = (p: P) => (
     <path d="m6.5 12 1.8 1.8 3.2-3.4M18 8v8M14 12h8" />
   </Svg>
 );
+export const IconMore = (p: P) => (
+  <Svg {...p}>
+    <circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+    <circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none" />
+  </Svg>
+);
+export const IconHeading = (p: P) => (
+  <Svg {...p}>
+    <path d="M6 5v14M18 5v14M6 12h12" />
+  </Svg>
+);
+export const IconParagraph = (p: P) => (
+  <Svg {...p}>
+    <path d="M13 4v16M17 4v16M19 4H9.5a4.5 4.5 0 0 0 0 9H13" />
+  </Svg>
+);
+export const IconOutline = (p: P) => (
+  <Svg {...p}>
+    <path d="M4 6h12M8 12h12M8 18h9" />
+    <circle cx="4" cy="12" r="0.8" fill="currentColor" />
+    <circle cx="4" cy="18" r="0.8" fill="currentColor" />
+  </Svg>
+);
+export const IconSidebar = (p: P) => (
+  <Svg {...p}>
+    <rect x="3" y="4" width="18" height="16" rx="3" />
+    <path d="M9 4v16" />
+  </Svg>
+);
+export const IconCallout = (p: P) => (
+  <Svg {...p}>
+    <rect x="3" y="4" width="18" height="16" rx="3" />
+    <path d="M12 9v4M12 16.2v.3" />
+  </Svg>
+);

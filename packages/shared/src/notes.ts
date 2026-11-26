@@ -22,7 +22,14 @@ export function markdownToText(body: string): string {
     .replace(/^\s{0,3}(?:#{1,6}|>|[-*+]\s+\[[ xX]\]|[-*+]|\d+[.)])\s+/gm, '')
     .replace(/(\*\*|__|~~|`)/g, '')
     .replace(/(^|\s)[*_](\S[^*_]*)[*_](?=\s|$)/g, '$1$2')
-    .replace(/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/gm, ' ')
+    // Trennlinien und die Linie unter Tabellenköpfen ("| --- | --- |")
+    .replace(/^[\s|:-]*-{3,}[\s|:-]*$/gm, ' ')
+    .replace(/^\s*(?:\*{3,}|_{3,})\s*$/gm, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/^\s*:::\s*\w*\s*$/gm, ' ')
+    .replace(/\|/g, ' ')
+    // Markdown-Maskierungen ("\[" → "[")
+    .replace(/\\([\\`*_{}[\]()#+\-.!>|~])/g, '$1')
     .replace(/\s+/g, ' ')
     .trim();
 }
